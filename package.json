@@ -1,0 +1,53 @@
+{
+  "name": "publicboard",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.10",
+  "scripts": {
+    "dev": "bun --bun vite dev",
+    "build": "bun run typecheck && bun --bun vite build",
+    "start": "bun run dist/server/server.js",
+    "preview": "bun --bun vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test",
+    "test": "bun --bun vitest run",
+    "test:watch": "bun --bun vitest watch",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.5.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@tanstack/react-start": "latest",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "1.0.0-rc.3",
+    "effect": "^4.0.0-beta.78",
+    "lucide-react": "^1.17.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "shadcn": "^4.11.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.0",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@biomejs/biome": "latest",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "drizzle-kit": "1.0.0-rc.3",
+    "jsdom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

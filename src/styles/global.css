@@ -1,3 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  background: #f6f7f4;
+}
+
+body {
+  overflow: hidden;
+}

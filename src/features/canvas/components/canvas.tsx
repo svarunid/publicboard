@@ -10,18 +10,12 @@ import {
   boundsCenter,
   clamp,
   constrainViewBox,
+  padViewBox,
   translateBounds,
   viewBoxForBounds,
   viewBoxHeight,
   viewBoxWidth,
 } from "../utils";
-
-declare global {
-  interface Window {
-    __publicBoardCanvasHydrated?: boolean;
-    __publicBoardCanvasZoomDefaultGuard?: boolean;
-  }
-}
 
 type DragState = {
   pointerId: number;
@@ -30,7 +24,6 @@ type DragState = {
   lastX: number;
   lastY: number;
   hasDragged: boolean;
-  targetStateName: string | null;
 };
 
 const MIN_ZOOM_PERCENT = 100;
@@ -57,22 +50,37 @@ const CAMERA_ANIMATION_DURATION_MS = 180;
 /**
  * Client-only SVG map surface.
  *
- * The server loader provides a prepared CanvasMap, so this component is only
- * responsible for camera state, pointer/keyboard interaction, selection, and
- * accessible status updates.
+ * The default mode is a static state-selection map. Once a state is selected,
+ * the component mounts only that state's district layer and enables district
+ * map camera controls.
  */
 export function Canvas({ map }: { map: CanvasMap }) {
   const [viewBox, setViewBoxState] = React.useState<Bounds>(() => map.baseViewBox);
-  const [selectedState, setSelectedState] = React.useState<string | null>(null);
+  const [selectedStateName, setSelectedStateName] = React.useState<string | null>(null);
   const [focusedState, setFocusedState] = React.useState<string | null>(null);
+  const [isResettingToFullMap, setIsResettingToFullMap] = React.useState(false);
+  const [isFullMapRevealVisible, setIsFullMapRevealVisible] = React.useState(true);
   const [isDragging, setIsDragging] = React.useState(false);
   const [status, setStatus] = React.useState("India map loaded");
   const svgShellRef = React.useRef<HTMLDivElement | null>(null);
   const dragStateRef = React.useRef<DragState | null>(null);
   const viewBoxRef = React.useRef<Bounds>(map.baseViewBox);
   const zoomBaseViewBoxRef = React.useRef<Bounds>(map.baseViewBox);
+  const panExtentRef = React.useRef<Bounds>(map.baseViewBox);
   const cameraAnimationRef = React.useRef<number | null>(null);
+  const fullMapRevealAnimationRef = React.useRef<number | null>(null);
   const suppressNextClickRef = React.useRef(false);
+  const selectedStateNameRef = React.useRef<string | null>(null);
+
+  const selectedState = React.useMemo(
+    () => map.states.find((state) => state.name === selectedStateName) ?? null,
+    [map.states, selectedStateName],
+  );
+  const isDistrictMode = selectedState !== null && !isResettingToFullMap;
+
+  React.useEffect(() => {
+    selectedStateNameRef.current = selectedStateName;
+  }, [selectedStateName]);
 
   /** Stop any in-flight camera tween before a direct pan or new zoom target. */
   const cancelCameraAnimation = React.useCallback(() => {
@@ -82,6 +90,15 @@ export function Canvas({ map }: { map: CanvasMap }) {
 
     window.cancelAnimationFrame(cameraAnimationRef.current);
     cameraAnimationRef.current = null;
+  }, []);
+
+  const cancelFullMapRevealAnimation = React.useCallback(() => {
+    if (fullMapRevealAnimationRef.current === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(fullMapRevealAnimationRef.current);
+    fullMapRevealAnimationRef.current = null;
   }, []);
 
   /**
@@ -106,12 +123,13 @@ export function Canvas({ map }: { map: CanvasMap }) {
    * enabled receive the final view immediately.
    */
   const animateViewBox = React.useCallback(
-    (targetViewBox: Bounds) => {
+    (targetViewBox: Bounds, onComplete?: () => void) => {
       cancelCameraAnimation();
 
       if (prefersReducedMotion() || areBoundsEqual(viewBoxRef.current, targetViewBox)) {
         viewBoxRef.current = targetViewBox;
         setViewBoxState(targetViewBox);
+        onComplete?.();
         return;
       }
 
@@ -134,6 +152,7 @@ export function Canvas({ map }: { map: CanvasMap }) {
         cameraAnimationRef.current = null;
         viewBoxRef.current = targetViewBox;
         setViewBoxState(targetViewBox);
+        onComplete?.();
       }
 
       cameraAnimationRef.current = window.requestAnimationFrame(step);
@@ -142,18 +161,17 @@ export function Canvas({ map }: { map: CanvasMap }) {
   );
 
   React.useEffect(() => {
-    window.__publicBoardCanvasHydrated = true;
-
     return () => {
-      window.__publicBoardCanvasHydrated = false;
       cancelCameraAnimation();
+      cancelFullMapRevealAnimation();
     };
-  }, [cancelCameraAnimation]);
+  }, [cancelCameraAnimation, cancelFullMapRevealAnimation]);
 
   const measureFullMapViewBox = React.useCallback(() => {
     const fullMapViewBox = getFullMapViewBox(map, svgShellRef.current);
 
     zoomBaseViewBoxRef.current = fullMapViewBox;
+    panExtentRef.current = map.baseViewBox;
     return fullMapViewBox;
   }, [map]);
 
@@ -165,47 +183,70 @@ export function Canvas({ map }: { map: CanvasMap }) {
     return `${viewBox.minX} ${viewBox.minY} ${viewBoxWidth(viewBox)} ${viewBoxHeight(viewBox)}`;
   }, [viewBox]);
 
+  const selectedDistricts = selectedState ? (map.districtsByState[selectedState.name] ?? []) : [];
+
   /**
    * Return to the full-map camera. The actual full view is recalculated from the
    * live canvas aspect ratio so the map remains centered after browser resizing.
    */
   const resetMap = React.useCallback(() => {
-    setSelectedState(null);
-    animateViewBox(measureFullMapViewBox());
+    dragStateRef.current = null;
+    cancelFullMapRevealAnimation();
+    setIsResettingToFullMap(true);
+    setIsFullMapRevealVisible(false);
+    setIsDragging(false);
+    fullMapRevealAnimationRef.current = window.requestAnimationFrame(() => {
+      fullMapRevealAnimationRef.current = null;
+      setIsFullMapRevealVisible(true);
+    });
+    animateViewBox(measureFullMapViewBox(), () => {
+      setSelectedStateName(null);
+      setIsResettingToFullMap(false);
+    });
     setStatus("Showing all India states and union territories");
-  }, [animateViewBox, measureFullMapViewBox]);
+  }, [animateViewBox, cancelFullMapRevealAnimation, measureFullMapViewBox]);
 
-  /** Select a state and frame it with enough surrounding context to stay legible. */
-  const zoomToState = React.useCallback(
+  /** Select a state and isolate it as the district inspection extent. */
+  const selectState = React.useCallback(
     (state: CanvasMapFeature) => {
       const aspectRatio = getCanvasAspectRatio(svgShellRef.current) ?? 1;
       const targetViewBox = viewBoxForBounds(
         state.bounds,
         aspectRatio,
-        window.matchMedia("(max-width: 640px)").matches ? 0.58 : 0.7,
+        window.matchMedia("(max-width: 640px)").matches ? 0.76 : 0.84,
       );
 
-      setSelectedState(state.name);
-      animateViewBox(constrainViewBox(targetViewBox, map.baseViewBox));
-      setStatus(`${state.name} selected`);
+      cancelFullMapRevealAnimation();
+      setIsResettingToFullMap(false);
+      setIsFullMapRevealVisible(true);
+      setSelectedStateName(state.name);
+      zoomBaseViewBoxRef.current = targetViewBox;
+      panExtentRef.current = targetViewBox;
+      animateViewBox(targetViewBox);
+      setStatus(
+        (map.districtsByState[state.name] ?? []).length > 0
+          ? `${state.name} selected`
+          : `${state.name} selected; no districts available`,
+      );
     },
-    [animateViewBox, map],
+    [animateViewBox, cancelFullMapRevealAnimation, map.districtsByState],
   );
 
   /**
-   * Set zoom around the current camera center.
-   *
-   * The minimum zoom represents the complete map, so zooming back to that level
-   * also clears state selection and reuses the live full-map framing.
+   * Set district-map zoom around the current camera center. The minimum zoom is
+   * the selected state's fitted camera, not the full India map.
    */
   const updateZoomToPercent = React.useCallback(
     (nextPercent: number) => {
+      if (!isDistrictMode || !selectedState) {
+        return;
+      }
+
       const percent = clamp(Math.round(nextPercent), MIN_ZOOM_PERCENT, MAX_ZOOM_PERCENT);
 
       if (percent === MIN_ZOOM_PERCENT) {
-        setSelectedState(null);
-        animateViewBox(measureFullMapViewBox());
-        setStatus("Showing all India states and union territories");
+        animateViewBox(zoomBaseViewBoxRef.current);
+        setStatus(`District map zoom ${percent}%`);
         return;
       }
 
@@ -224,12 +265,12 @@ export function Canvas({ map }: { map: CanvasMap }) {
             maxX: center.x + nextWidth / 2,
             maxY: center.y + nextHeight / 2,
           },
-          map.baseViewBox,
+          panExtentRef.current,
         ),
       );
-      setStatus(`Map zoom ${percent}%`);
+      setStatus(`District map zoom ${percent}%`);
     },
-    [animateViewBox, map, measureFullMapViewBox],
+    [animateViewBox, isDistrictMode, selectedState],
   );
 
   /**
@@ -249,6 +290,10 @@ export function Canvas({ map }: { map: CanvasMap }) {
 
   React.useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
+      if (selectedStateNameRef.current) {
+        return;
+      }
+
       const fullMapViewBox = measureFullMapViewBox();
 
       viewBoxRef.current = fullMapViewBox;
@@ -260,41 +305,54 @@ export function Canvas({ map }: { map: CanvasMap }) {
     };
   }, [measureFullMapViewBox]);
 
-  /** Pan immediately and clamp the result so the map cannot be dragged away. */
+  React.useEffect(() => {
+    if (!selectedState) {
+      return;
+    }
+
+    panExtentRef.current = padViewBox(
+      zoomBaseViewBoxRef.current,
+      viewBoxWidth(zoomBaseViewBoxRef.current) * 0.03,
+    );
+  }, [selectedState]);
+
+  /** Pan district mode immediately and clamp the result inside the state extent. */
   const panViewBox = React.useCallback(
     (deltaX: number, deltaY: number) => {
+      if (!isDistrictMode || !selectedState) {
+        return;
+      }
+
       const nextViewBox = constrainViewBox(
         translateBounds(viewBoxRef.current, deltaX, deltaY),
-        map.baseViewBox,
+        panExtentRef.current,
       );
 
       setViewBox(nextViewBox);
     },
-    [map, setViewBox],
+    [isDistrictMode, selectedState, setViewBox],
   );
 
-  /**
-   * Capture the initial pointer target so a click on a state can still be
-   * recognized after the pointer-up event, while movement beyond the threshold
-   * turns the gesture into a pan.
-   */
-  const handleCanvasPointerDown = React.useCallback((event: React.PointerEvent<SVGSVGElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
+  /** Start a drag from anywhere on the district map surface while district mode is active. */
+  const handleCanvasPointerDown = React.useCallback(
+    (event: React.PointerEvent<SVGSVGElement>) => {
+      if (!isDistrictMode || !selectedState || event.button !== 0) {
+        return;
+      }
 
-    dragStateRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      lastX: event.clientX,
-      lastY: event.clientY,
-      hasDragged: false,
-      targetStateName: getStatePathTargetName(event.target),
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setIsDragging(true);
-  }, []);
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        hasDragged: false,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setIsDragging(true);
+    },
+    [isDistrictMode, selectedState],
+  );
 
   /**
    * Convert screen-space pointer movement into SVG-coordinate movement. The
@@ -305,7 +363,12 @@ export function Canvas({ map }: { map: CanvasMap }) {
     (event: React.PointerEvent<SVGSVGElement>) => {
       const dragState = dragStateRef.current;
 
-      if (!dragState || dragState.pointerId !== event.pointerId) {
+      if (
+        !isDistrictMode ||
+        !selectedState ||
+        !dragState ||
+        dragState.pointerId !== event.pointerId
+      ) {
         return;
       }
 
@@ -330,53 +393,54 @@ export function Canvas({ map }: { map: CanvasMap }) {
       const deltaY = -(movementY / bounds.height) * viewBoxHeight(viewBox);
 
       panViewBox(deltaX, deltaY);
-      setSelectedState(null);
-      setStatus("Map panned");
+      setStatus("District map panned");
     },
-    [panViewBox, viewBox],
+    [isDistrictMode, panViewBox, selectedState, viewBox],
   );
 
-  /** Finish a pointer gesture as either a drag or a state selection. */
-  const handleCanvasPointerEnd = React.useCallback(
-    (event: React.PointerEvent<SVGSVGElement>) => {
-      const dragState = dragStateRef.current;
+  /** Finish a district drag gesture without treating the synthesized click as reset. */
+  const handleCanvasPointerEnd = React.useCallback((event: React.PointerEvent<SVGSVGElement>) => {
+    const dragState = dragStateRef.current;
 
-      if (!dragState || dragState.pointerId !== event.pointerId) {
-        return;
-      }
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
 
-      if (dragState.hasDragged) {
-        suppressNextClickRef.current = true;
-      } else if (dragState.targetStateName) {
-        const targetState = map.states.find((state) => state.name === dragState.targetStateName);
+    if (dragState.hasDragged) {
+      suppressNextClickRef.current = true;
+    }
 
-        if (targetState) {
-          suppressNextClickRef.current = true;
-          zoomToState(targetState);
-        }
-      }
+    dragStateRef.current = null;
+    setIsDragging(false);
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
 
-      dragStateRef.current = null;
-      setIsDragging(false);
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    },
-    [map, zoomToState],
-  );
-
-  /** Empty-space clicks reset the map, but clicks synthesized after a drag are ignored. */
+  /** Background clicks reset district mode, but clicks synthesized after a drag are ignored. */
   const handleCanvasClick = React.useCallback(() => {
     if (suppressNextClickRef.current) {
       suppressNextClickRef.current = false;
       return;
     }
 
-    resetMap();
-  }, [resetMap]);
+    if (isDistrictMode && selectedState) {
+      resetMap();
+    }
+  }, [isDistrictMode, resetMap, selectedState]);
 
-  /** Keyboard support mirrors pointer interaction for zooming and panning. */
+  /** Keyboard support enables district zooming/panning only after state selection. */
   const handleCanvasKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
       if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.key === "Escape" && isDistrictMode && selectedState) {
+        event.preventDefault();
+        resetMap();
+        return;
+      }
+
+      if (!isDistrictMode || !selectedState) {
         return;
       }
 
@@ -411,15 +475,18 @@ export function Canvas({ map }: { map: CanvasMap }) {
         return;
       }
 
-      setSelectedState(null);
-      setStatus("Map panned");
+      setStatus("District map panned");
     },
-    [panViewBox, updateZoomByScale, viewBox],
+    [isDistrictMode, panViewBox, resetMap, selectedState, updateZoomByScale, viewBox],
   );
 
-  /** Wheel events use a native listener so preventDefault can stop page/browser zoom. */
+  /** Wheel events use a native listener so preventDefault can stop page/browser zoom in district mode. */
   const zoomByWheel = React.useCallback(
     (event: WheelEvent) => {
+      if (!isDistrictMode || !selectedState) {
+        return;
+      }
+
       event.preventDefault();
 
       if (event.deltaY === 0) {
@@ -428,12 +495,12 @@ export function Canvas({ map }: { map: CanvasMap }) {
 
       updateZoomByScale(Math.exp(-event.deltaY * WHEEL_ZOOM_SENSITIVITY));
     },
-    [updateZoomByScale],
+    [isDistrictMode, selectedState, updateZoomByScale],
   );
 
   React.useEffect(() => {
     function handleWindowKeyDown(event: KeyboardEvent) {
-      if (!event.metaKey && !event.ctrlKey) {
+      if (!isDistrictMode || !selectedState || (!event.metaKey && !event.ctrlKey)) {
         return;
       }
 
@@ -451,12 +518,12 @@ export function Canvas({ map }: { map: CanvasMap }) {
     return () => {
       window.removeEventListener("keydown", handleWindowKeyDown, { capture: true });
     };
-  }, [updateZoomByScale]);
+  }, [isDistrictMode, selectedState, updateZoomByScale]);
 
   React.useEffect(() => {
     const mapSurface = svgShellRef.current;
 
-    if (!mapSurface) {
+    if (!mapSurface || !isDistrictMode || !selectedState) {
       return;
     }
 
@@ -465,20 +532,27 @@ export function Canvas({ map }: { map: CanvasMap }) {
     return () => {
       mapSurface.removeEventListener("wheel", zoomByWheel, { capture: true });
     };
-  }, [zoomByWheel]);
+  }, [isDistrictMode, selectedState, zoomByWheel]);
+
+  const visibleStates = selectedState && !isResettingToFullMap ? [selectedState] : map.states;
 
   return (
     <main
       className="fixed inset-0 h-dvh w-dvw overflow-hidden bg-[#f6f7f4] text-[#111111]"
+      data-canvas-district-mode={isDistrictMode ? "true" : "false"}
       data-canvas-map-root=""
     >
       <section
         ref={svgShellRef}
-        aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Control++ Meta++ Control+- Meta+-"
+        aria-keyshortcuts={
+          isDistrictMode
+            ? "ArrowLeft ArrowRight ArrowUp ArrowDown Control++ Meta++ Control+- Meta+- Escape"
+            : undefined
+        }
         className="absolute inset-0 bg-[#f6f7f4]"
         aria-label="India Map"
         role="application"
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: the map canvas is keyboard-operable with arrows and zoom shortcuts.
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the map canvas supports mode-specific keyboard operations.
         tabIndex={0}
         onKeyDown={handleCanvasKeyDown}
       >
@@ -487,7 +561,9 @@ export function Canvas({ map }: { map: CanvasMap }) {
           className={
             isDragging
               ? "block h-full w-full cursor-grabbing touch-none select-none bg-[#f6f7f4] outline-none focus-visible:outline-none"
-              : "block h-full w-full cursor-grab touch-none select-none bg-[#f6f7f4] outline-none focus-visible:outline-none"
+              : isDistrictMode
+                ? "block h-full w-full cursor-grab touch-none select-none bg-[#f6f7f4] outline-none focus-visible:outline-none"
+                : "block h-full w-full cursor-default touch-none select-none bg-[#f6f7f4] outline-none focus-visible:outline-none"
           }
           preserveAspectRatio="xMidYMid meet"
           role="img"
@@ -506,34 +582,55 @@ export function Canvas({ map }: { map: CanvasMap }) {
             y={viewBox.minY}
           />
           <g>
-            {map.states.map((state, index) => {
-              const isSelected = selectedState === state.name;
+            {visibleStates.map((state, index) => {
+              const originalIndex = map.states.findIndex((mapState) => mapState.id === state.id);
+              const isSelected = selectedState?.name === state.name;
               const isHighlighted = isSelected || focusedState === state.name;
+              const opacity =
+                selectedState &&
+                isResettingToFullMap &&
+                !isFullMapRevealVisible &&
+                state.name !== selectedState.name
+                  ? 0
+                  : 1;
 
               return (
                 <path
                   aria-label={state.name}
                   data-map-state="true"
                   data-map-state-name={state.name}
-                  className="cursor-grab outline-none transition-[fill,stroke,stroke-width] duration-150 focus-visible:outline-none active:cursor-grabbing"
+                  data-testid="map-state"
+                  className={
+                    isDistrictMode
+                      ? "cursor-grab outline-none transition-[fill,stroke,stroke-width,opacity] duration-150 focus-visible:outline-none active:cursor-grabbing"
+                      : "cursor-pointer outline-none transition-[fill,stroke,stroke-width,opacity] duration-150 focus-visible:outline-none"
+                  }
                   d={state.path}
-                  fill={STATE_FILL_COLORS[index % STATE_FILL_COLORS.length]}
+                  fill={
+                    STATE_FILL_COLORS[
+                      (originalIndex < 0 ? index : originalIndex) % STATE_FILL_COLORS.length
+                    ]
+                  }
                   key={state.id}
+                  opacity={opacity}
                   role="button"
                   stroke={isHighlighted ? SELECTED_STROKE_COLOR : STATE_STROKE_COLOR}
                   strokeLinejoin="round"
                   strokeWidth={isHighlighted ? 1.4 : 0.8}
-                  tabIndex={0}
+                  tabIndex={opacity === 0 ? -1 : 0}
                   vectorEffect="non-scaling-stroke"
                   onBlur={() => setFocusedState(null)}
                   onClick={(event) => {
                     event.stopPropagation();
+
                     if (suppressNextClickRef.current) {
                       suppressNextClickRef.current = false;
                       return;
                     }
 
-                    zoomToState(state);
+                    if (!selectedState) {
+                      selectState(state);
+                    }
                   }}
                   onFocus={() => setFocusedState(state.name)}
                   onKeyDown={(event) => {
@@ -542,66 +639,74 @@ export function Canvas({ map }: { map: CanvasMap }) {
                     }
 
                     event.preventDefault();
-                    zoomToState(state);
+
+                    if (!selectedState) {
+                      selectState(state);
+                    }
                   }}
                 />
               );
             })}
           </g>
-          <g pointerEvents="none">
-            {map.districts.map((district) => (
-              <path
-                d={district.path}
-                fill="none"
-                key={district.id}
-                opacity="0.6"
-                stroke={DISTRICT_STROKE_COLOR}
-                strokeLinejoin="round"
-                strokeWidth="0.38"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </g>
+          {selectedState ? (
+            <g data-testid="map-district-layer" pointerEvents="none">
+              {selectedDistricts.map((district) => (
+                <path
+                  d={district.path}
+                  data-testid="map-district"
+                  fill="none"
+                  key={district.id}
+                  opacity="0.72"
+                  stroke={DISTRICT_STROKE_COLOR}
+                  strokeLinejoin="round"
+                  strokeWidth="0.45"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </g>
+          ) : null}
         </svg>
       </section>
 
-      <div className="pointer-events-none fixed right-4 bottom-4 sm:right-6 sm:bottom-6">
-        <ButtonGroup
-          aria-label="Map zoom controls"
-          className="pointer-events-auto gap-4 *:data-slot:rounded-full! [&>[data-slot]:not(:has(~[data-slot]))]:rounded-full! [&>[data-slot]~[data-slot]]:border-l"
-        >
-          <Button
-            aria-label="Zoom in"
-            className="size-12 rounded-full! border-[#d8d8d8] bg-white! hover:bg-[#f7f8f6]! [&_svg]:size-5"
-            size="icon"
-            type="button"
-            variant="outline"
-            onClick={() => updateZoomByScale(ZOOM_STEP_SCALE_FACTOR)}
+      {isDistrictMode ? (
+        <div className="pointer-events-none fixed right-4 bottom-4 sm:right-6 sm:bottom-6">
+          <ButtonGroup
+            aria-label="Map zoom controls"
+            className="pointer-events-auto gap-4 *:data-slot:rounded-full! [&>[data-slot]:not(:has(~[data-slot]))]:rounded-full! [&>[data-slot]~[data-slot]]:border-l"
           >
-            <PlusIcon />
-          </Button>
+            <Button
+              aria-label="Zoom in"
+              className="size-12 rounded-full! border-[#d8d8d8] bg-white! hover:bg-[#f7f8f6]! [&_svg]:size-5"
+              size="icon"
+              type="button"
+              variant="outline"
+              onClick={() => updateZoomByScale(ZOOM_STEP_SCALE_FACTOR)}
+            >
+              <PlusIcon />
+            </Button>
 
-          <ButtonGroupText
-            aria-label={`Map zoom ${zoomPercent}%`}
-            aria-live="polite"
-            className="h-12 min-w-24 cursor-default select-none justify-center rounded-full border border-[#d8d8d8] bg-white! px-5 text-lg font-normal tabular-nums"
-            role="status"
-          >
-            {zoomPercent}%
-          </ButtonGroupText>
+            <ButtonGroupText
+              aria-label={`District map zoom ${zoomPercent}%`}
+              aria-live="polite"
+              className="h-12 min-w-24 cursor-default select-none justify-center rounded-full border border-[#d8d8d8] bg-white! px-5 text-lg font-normal tabular-nums"
+              role="status"
+            >
+              {zoomPercent}%
+            </ButtonGroupText>
 
-          <Button
-            aria-label="Zoom out"
-            className="size-12 rounded-full! border-[#d8d8d8] bg-white! hover:bg-[#f7f8f6]! [&_svg]:size-5"
-            size="icon"
-            type="button"
-            variant="outline"
-            onClick={() => updateZoomByScale(1 / ZOOM_STEP_SCALE_FACTOR)}
-          >
-            <MinusIcon />
-          </Button>
-        </ButtonGroup>
-      </div>
+            <Button
+              aria-label="Zoom out"
+              className="size-12 rounded-full! border-[#d8d8d8] bg-white! hover:bg-[#f7f8f6]! [&_svg]:size-5"
+              size="icon"
+              type="button"
+              variant="outline"
+              onClick={() => updateZoomByScale(1 / ZOOM_STEP_SCALE_FACTOR)}
+            >
+              <MinusIcon />
+            </Button>
+          </ButtonGroup>
+        </div>
+      ) : null}
 
       <p className="sr-only" aria-live="polite">
         {status}
@@ -641,15 +746,6 @@ function getCanvasAspectRatio(element: HTMLElement | null) {
   return rect.width / Math.max(rect.height, 1);
 }
 
-/** Find the nearest state path involved in a pointer gesture. */
-function getStatePathTargetName(target: EventTarget) {
-  if (!(target instanceof Element)) {
-    return null;
-  }
-
-  return target.closest("[data-map-state-name]")?.getAttribute("data-map-state-name") ?? null;
-}
-
 /** Respect the user system setting before running camera animation. */
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -682,7 +778,7 @@ function areBoundsEqual(left: Bounds, right: Bounds) {
   );
 }
 
-/** Express the current view-box width as a percentage of the full-map camera width. */
+/** Express the current view-box width as a percentage of the active camera baseline width. */
 function getZoomPercent(fullMapViewBox: Bounds, currentViewBox: Bounds) {
   return clamp(
     Math.round((viewBoxWidth(fullMapViewBox) / viewBoxWidth(currentViewBox)) * 100),

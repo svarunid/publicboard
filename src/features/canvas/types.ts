@@ -53,6 +53,8 @@ export type CanvasMapFeature = {
   bounds: Bounds;
 };
 
+export type CanvasDistrictsByState = Record<string, CanvasMapFeature[]>;
+
 /**
  * Complete map payload passed through the route loader.
  *
@@ -61,6 +63,6 @@ export type CanvasMapFeature = {
  */
 export type CanvasMap = {
   states: CanvasMapFeature[];
-  districts: CanvasMapFeature[];
+  districtsByState: CanvasDistrictsByState;
   baseViewBox: Bounds;
 };

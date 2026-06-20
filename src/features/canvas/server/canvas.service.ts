@@ -1,18 +1,9 @@
-import { Schema } from "effect";
-
-import { BoundaryFeatureCollectionSchema } from "../schemas";
+import { decodeBoundaryFeatureCollection } from "../schemas";
 import { prepareMap } from "../utils";
 
 const MAP_DIRECTORY = "public/maps/survey-of-india";
 const STATE_DATA_PATH = `${MAP_DIRECTORY}/india-states.geojson`;
 const DISTRICT_DATA_PATH = `${MAP_DIRECTORY}/india-districts.geojson`;
-
-/**
- * Synchronous decoder is acceptable here because the map files are loaded once
- * per server function call before the route renders. Failing fast at this
- * boundary prevents malformed GeoJSON from reaching the client canvas.
- */
-const decodeBoundaryFeatureCollection = Schema.decodeUnknownSync(BoundaryFeatureCollectionSchema);
 
 /**
  * Load local GeoJSON assets and return the prepared render payload for the

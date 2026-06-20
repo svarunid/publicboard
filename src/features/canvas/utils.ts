@@ -23,6 +23,9 @@ type Point = readonly [number, number];
 export const SVG_WIDTH = 1000;
 
 const SVG_PADDING = 24;
+const DISTRICT_STATE_ALIASES: Readonly<Record<string, string>> = {
+  "ANDAMAN AND NICOBAR ISLANDS": "ANDAMAN & NICOBAR",
+};
 
 /**
  * Convert validated GeoJSON boundary collections into the compact render model
@@ -39,9 +42,21 @@ export function prepareMap(
   const renderedStates = states.features.map((feature, index) =>
     renderFeature(feature, index, "STATE", projection),
   );
-  const renderedDistricts = districts.features.map((feature, index) =>
-    renderFeature(feature, index, "DISTRICT", projection),
+  const stateNames = new Set(renderedStates.map((state) => state.name));
+  const districtsByState = Object.fromEntries(
+    renderedStates.map((state) => [state.name, [] as CanvasMapFeature[]]),
   );
+
+  districts.features.forEach((feature, index) => {
+    const stateName = getDistrictStateName(feature.properties, stateNames);
+
+    if (!stateName) {
+      return;
+    }
+
+    districtsByState[stateName]?.push(renderFeature(feature, index, "DISTRICT", projection));
+  });
+
   const mapBounds = renderedStates.reduce(
     (bounds, state) => mergeBounds(bounds, state.bounds),
     createEmptyBounds(),
@@ -49,7 +64,7 @@ export function prepareMap(
 
   return {
     states: renderedStates,
-    districts: renderedDistricts,
+    districtsByState,
     baseViewBox: padBounds(mapBounds, 18),
   };
 }
@@ -133,6 +148,10 @@ export function viewBoxHeight(bounds: Bounds) {
 
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+export function padViewBox(bounds: Bounds, padding: number): Bounds {
+  return padBounds(bounds, padding);
 }
 
 /**
@@ -281,6 +300,22 @@ function propertyString(properties: BoundaryProperties, key: string) {
   }
 
   return null;
+}
+
+function getDistrictStateName(properties: BoundaryProperties, stateNames: ReadonlySet<string>) {
+  const rawStateName = propertyString(properties, "STATE_UT");
+
+  if (!rawStateName) {
+    return null;
+  }
+
+  const stateName = DISTRICT_STATE_ALIASES[rawStateName] ?? rawStateName;
+
+  if (!stateNames.has(stateName)) {
+    return null;
+  }
+
+  return stateName;
 }
 
 function projectPosition(projection: GeoProjection, position: Position): Point {

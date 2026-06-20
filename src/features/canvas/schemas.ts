@@ -48,3 +48,12 @@ export const BoundaryFeatureCollectionSchema = Schema.Struct({
   type: Schema.Literal("FeatureCollection"),
   features: Schema.Array(BoundaryFeatureSchema),
 });
+
+/**
+ * Synchronous decoder is acceptable here because the map files are loaded once
+ * per server function call before the route renders. Failing fast at this
+ * boundary prevents malformed GeoJSON from reaching the client canvas.
+ */
+export const decodeBoundaryFeatureCollection = Schema.decodeUnknownSync(
+  BoundaryFeatureCollectionSchema,
+);

@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Feature Decision History | PublicBoard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.965 0 0);
+        --surface-raised: oklch(1 0 0);
+        --surface-code: oklch(0.94 0 0);
+        --ink: oklch(0.16 0 0);
+        --muted: oklch(0.39 0 0);
+        --faint: oklch(0.58 0 0);
+        --border: oklch(0.82 0 0);
+        --border-strong: oklch(0.64 0 0);
+        --focus: oklch(0.5 0.19 260);
+        --info: oklch(0.44 0.16 255);
+        --success: oklch(0.42 0.12 145);
+        --warning: oklch(0.55 0.12 78);
+        --error: oklch(0.47 0.16 25);
+        --state-fill: oklch(0.89 0.05 147);
+        --camera-fill: oklch(0.95 0.03 255);
+        --scroll-fill: oklch(0.94 0.04 72);
+        --radius: 8px;
+        --radius-sm: 4px;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--info);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.18em;
+      }
+
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo,
+          monospace;
+      }
+
+      code {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-code);
+        padding: 0.08rem 0.28rem;
+        font-size: 0.88em;
+      }
+
+      pre {
+        max-inline-size: 100%;
+        margin: 0;
+        overflow: auto;
+        scrollbar-gutter: stable;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-code);
+        padding: 1rem;
+        font-size: 0.86rem;
+        line-height: 1.5;
+      }
+
+      .page {
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+        min-height: 100dvh;
+      }
+
+      .sidebar {
+        position: sticky;
+        inset-block-start: 0;
+        align-self: start;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        block-size: 100dvh;
+        overflow: auto;
+        scrollbar-gutter: stable;
+        border-inline-end: 1px solid var(--border);
+        background: var(--surface);
+        padding: 1.25rem;
+      }
+
+      .brand {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .brand strong {
+        font-size: 1rem;
+        font-weight: 650;
+        line-height: 1.25;
+      }
+
+      .brand span {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: 0.2rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nav-list a {
+        display: block;
+        border-radius: var(--radius-sm);
+        padding: 0.45rem 0.55rem;
+        color: var(--ink);
+        font-size: 0.88rem;
+        text-decoration: none;
+      }
+
+      .nav-list a:hover {
+        background: var(--surface-raised);
+      }
+
+      .sidebar-note {
+        margin-block-start: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 0.75rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .content {
+        display: grid;
+        gap: 2rem;
+        inline-size: min(100%, 1240px);
+        margin-inline: auto;
+        padding: 2rem;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+        gap: 1.5rem;
+        align-items: stretch;
+        border-block-end: 1px solid var(--border);
+        padding-block-end: 2rem;
+      }
+
+      .hero-copy {
+        display: grid;
+        align-content: start;
+        gap: 1rem;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        color: var(--ink);
+        font-weight: 650;
+        letter-spacing: 0;
+        text-wrap: balance;
+      }
+
+      h1 {
+        max-inline-size: 18ch;
+        font-size: 2rem;
+        line-height: 1.15;
+      }
+
+      h2 {
+        font-size: 1.45rem;
+        line-height: 1.2;
+      }
+
+      h3 {
+        font-size: 1.08rem;
+        line-height: 1.3;
+      }
+
+      p {
+        max-inline-size: 72ch;
+        margin: 0;
+        color: var(--muted);
+        text-wrap: pretty;
+      }
+
+      .lede {
+        color: var(--ink);
+        font-size: 1.02rem;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: 1.65rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        padding-inline: 0.6rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .section {
+        display: grid;
+        gap: 1rem;
+        padding-block: 0.5rem;
+      }
+
+      .section-header {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .decision-map {
+        display: grid;
+        gap: 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 1rem;
+      }
+
+      .diagram-frame {
+        min-block-size: 330px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .diagram-frame svg {
+        display: block;
+        inline-size: 100%;
+        block-size: 100%;
+        min-block-size: 330px;
+      }
+
+      .diagram-label {
+        fill: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .diagram-small {
+        fill: var(--muted);
+        font-size: 10px;
+        font-weight: 500;
+      }
+
+      .decision-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+
+      .decision-card {
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 1rem;
+      }
+
+      .decision-card h3 {
+        padding-block-end: 0.55rem;
+        border-block-end: 1px solid var(--border);
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: 1.5rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        padding-inline: 0.55rem;
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+
+      .status.accepted {
+        border-color: color-mix(in oklch, var(--success), var(--border) 55%);
+        color: var(--success);
+      }
+
+      .status.rejected {
+        border-color: color-mix(in oklch, var(--error), var(--border) 58%);
+        color: var(--error);
+      }
+
+      .status.watch {
+        border-color: color-mix(in oklch, var(--warning), var(--border) 50%);
+        color: var(--warning);
+      }
+
+      .dense-list {
+        display: grid;
+        gap: 0.55rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .dense-list li {
+        display: grid;
+        gap: 0.2rem;
+        padding-block: 0.2rem;
+      }
+
+      .dense-list strong {
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+
+      .dense-list span {
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 11rem minmax(0, 1fr);
+        gap: 1rem;
+        border-block-start: 1px solid var(--border);
+        padding-block-start: 0.85rem;
+      }
+
+      .timeline-item strong {
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+
+      .timeline-item p {
+        font-size: 0.9rem;
+      }
+
+      .comparison {
+        inline-size: 100%;
+        overflow: auto;
+        scrollbar-gutter: stable;
+      }
+
+      .data-table {
+        inline-size: 100%;
+        min-inline-size: 760px;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        overflow: clip;
+        font-size: 0.9rem;
+      }
+
+      .data-table caption {
+        padding-block: 0.5rem;
+        color: var(--muted);
+        text-align: left;
+      }
+
+      .data-table th,
+      .data-table td {
+        border-block-end: 1px solid var(--border);
+        padding: 0.75rem;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .data-table th {
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 0.78rem;
+        font-weight: 650;
+      }
+
+      .data-table td {
+        color: var(--muted);
+      }
+
+      .data-table tr:last-child td {
+        border-block-end: 0;
+      }
+
+      .two-column {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .panel {
+        display: grid;
+        gap: 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 1rem;
+      }
+
+      .panel h3 {
+        padding-block-end: 0.55rem;
+        border-block-end: 1px solid var(--border);
+      }
+
+      .callout {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 1rem;
+      }
+
+      .callout strong {
+        display: block;
+        margin-block-end: 0.3rem;
+        color: var(--ink);
+      }
+
+      details {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+      }
+
+      summary {
+        cursor: pointer;
+        padding: 0.85rem 1rem;
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      details[open] summary {
+        border-block-end: 1px solid var(--border);
+      }
+
+      .details-body {
+        display: grid;
+        gap: 0.75rem;
+        padding: 1rem;
+      }
+
+      .decision-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .strip-item {
+        display: grid;
+        gap: 0.3rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 0.85rem;
+      }
+
+      .strip-item strong {
+        color: var(--ink);
+        font-size: 0.92rem;
+      }
+
+      .strip-item span {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .footer {
+        border-block-start: 1px solid var(--border);
+        padding-block: 1.5rem 0.5rem;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      @media (max-width: 980px) {
+        .page {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          block-size: auto;
+          border-inline-end: 0;
+          border-block-end: 1px solid var(--border);
+        }
+
+        .sidebar-note {
+          margin-block-start: 0;
+        }
+
+        .nav-list {
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+
+        .hero,
+        .two-column {
+          grid-template-columns: 1fr;
+        }
+
+        .decision-strip {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 640px) {
+        .content {
+          padding: 1rem;
+        }
+
+        h1 {
+          font-size: 1.75rem;
+        }
+
+        .decision-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .timeline-item {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <aside class="sidebar">
+        <div class="brand">
+          <strong>Canvas history</strong>
+          <span>Implementation decisions and rejected paths</span>
+        </div>
+        <nav aria-label="Decision history sections">
+          <ul class="nav-list">
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#timeline">Decision timeline</a></li>
+            <li><a href="#coordinates">Coordinate shape</a></li>
+            <li><a href="#geojson">GeoJSON handling</a></li>
+            <li><a href="#viewbox">ViewBox camera</a></li>
+            <li><a href="#scrolling">Scroll and scale alternative</a></li>
+            <li><a href="#consequences">Consequences</a></li>
+            <li><a href="#anchors">Code anchors</a></li>
+          </ul>
+        </nav>
+        <p class="sidebar-note">
+          This page records architectural decisions behind the canvas feature. It complements
+          <code>FEATURE.html</code>, which explains the runtime flow.
+        </p>
+      </aside>
+
+      <main class="content">
+        <header class="hero" id="overview">
+          <div class="hero-copy">
+            <h1>Decision history for the canvas map</h1>
+            <p class="lede">
+              The canvas feature made a small set of choices that keep GeoJSON intake strict,
+              projection work server-side, and map interaction centered on one SVG camera model.
+              This document captures those choices, the alternatives considered, and the reasons
+              each path was accepted or rejected.
+            </p>
+            <div class="chip-row" aria-label="Decision themes">
+              <span class="chip">GeoJSON boundary</span>
+              <span class="chip">Effect Schema validation</span>
+              <span class="chip">d3-geo projection</span>
+              <span class="chip">SVG viewBox camera</span>
+              <span class="chip">Bounds-based focus</span>
+            </div>
+          </div>
+
+          <section class="decision-map" aria-labelledby="diagram-title">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 520 330" role="img" aria-labelledby="diagram-title diagram-desc">
+                <title id="diagram-title">Canvas decision model</title>
+                <desc id="diagram-desc">
+                  A diagram comparing the accepted viewBox camera path with the rejected scroll and
+                  scale path.
+                </desc>
+                <rect x="0" y="0" width="520" height="330" fill="oklch(0.965 0 0)"></rect>
+
+                <rect x="28" y="36" width="148" height="70" rx="6" fill="var(--surface-raised)" stroke="var(--border-strong)"></rect>
+                <text x="45" y="67" class="diagram-label">GeoJSON files</text>
+                <text x="45" y="87" class="diagram-small">Polygon, MultiPolygon</text>
+
+                <rect x="28" y="132" width="148" height="70" rx="6" fill="var(--surface-raised)" stroke="var(--border-strong)"></rect>
+                <text x="45" y="163" class="diagram-label">Effect Schema</text>
+                <text x="45" y="183" class="diagram-small">runtime boundary</text>
+
+                <rect x="28" y="228" width="148" height="70" rx="6" fill="var(--surface-raised)" stroke="var(--border-strong)"></rect>
+                <text x="45" y="259" class="diagram-label">d3-geo</text>
+                <text x="45" y="279" class="diagram-small">projection and paths</text>
+
+                <path d="M102 106 L102 132" stroke="var(--border-strong)" stroke-width="1.4"></path>
+                <path d="M102 202 L102 228" stroke="var(--border-strong)" stroke-width="1.4"></path>
+
+                <rect x="230" y="56" width="250" height="210" rx="8" fill="var(--camera-fill)" stroke="var(--border-strong)"></rect>
+                <path
+                  d="M322 88 C359 67 414 85 431 127 C455 185 414 244 356 240 C300 236 265 185 281 132 C288 111 302 97 322 88 Z"
+                  fill="var(--state-fill)"
+                  stroke="var(--ink)"
+                  stroke-width="1.4"
+                ></path>
+                <path d="M294 158 C330 148 374 153 431 188" fill="none" stroke="var(--faint)" stroke-width="1"></path>
+                <path d="M360 82 C351 128 349 185 371 242" fill="none" stroke="var(--faint)" stroke-width="1"></path>
+                <rect x="290" y="78" width="164" height="178" rx="4" fill="none" stroke="var(--warning)" stroke-width="2" stroke-dasharray="8 7"></rect>
+                <text x="252" y="292" class="diagram-label">Accepted: viewBox = map camera</text>
+                <text x="252" y="310" class="diagram-small">scale and position are one bounds object</text>
+
+                <path d="M176 263 C200 263 206 175 230 165" fill="none" stroke="var(--border-strong)" stroke-width="1.4"></path>
+                <path d="M218 160 L230 165 L220 172" fill="none" stroke="var(--border-strong)" stroke-width="1.4"></path>
+
+                <rect x="249" y="22" width="212" height="22" rx="11" fill="var(--scroll-fill)" stroke="var(--border)"></rect>
+                <text x="271" y="37" class="diagram-small">Rejected: CSS scale + scroll as primary camera</text>
+              </svg>
+            </div>
+            <p>
+              The accepted design treats the SVG <code>viewBox</code> as the camera. Every focus,
+              pan, and zoom operation produces a new <code>Bounds</code> object and lets SVG render
+              the correct coordinate rectangle.
+            </p>
+          </section>
+        </header>
+
+        <section class="section" id="timeline" aria-labelledby="timeline-title">
+          <div class="section-header">
+            <h2 id="timeline-title">Decision timeline</h2>
+            <p>
+              These decisions were clarified while reviewing the implementation and reasoning about
+              how the canvas should parse, validate, project, focus, and move.
+            </p>
+          </div>
+
+          <div class="timeline">
+            <article class="timeline-item">
+              <strong>Coordinate contract</strong>
+              <p>
+                Accept positions with longitude, latitude, and optional numeric dimensions because
+                GeoJSON positions can carry extra coordinate values. Projection consumes only the
+                first two numbers.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong>GeoJSON tooling</strong>
+              <p>
+                Keep JSON parsing simple, use Effect Schema for runtime validation, rely on
+                <code>d3-geo</code> for projection, and defer heavier geospatial libraries until
+                the feature needs geospatial analysis.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong>State focus</strong>
+              <p>
+                Focus a state by deriving a new camera rectangle from the selected state's bounds,
+                not by zooming the default camera in place.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong>Camera model</strong>
+              <p>
+                Keep the full state map static. Use the SVG view box as the movement model only
+                after a state is selected and the district layer is mounted.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong>District drag target</strong>
+              <p>
+                Let district-mode drag panning start from the whole SVG surface, not only the
+                selected state path, because an isolated state can leave useful camera space around
+                the shape.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong>Reset timing</strong>
+              <p>
+                Mount the full state set during reset, reveal the non-selected states with opacity
+                while the camera animates back to the full-map frame, then clear selection after the
+                animation completes.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="summary-title">
+          <div class="section-header">
+            <h2 id="summary-title">Accepted decisions</h2>
+            <p>
+              The feature keeps its important choices small. Each one reduces the number of places
+              where coordinate conversion, validation, or camera state can diverge.
+            </p>
+          </div>
+
+          <div class="decision-strip">
+            <article class="strip-item">
+              <strong>Accept GeoJSON dimensions</strong>
+              <span><code>[number, number, ...number[]]</code> matches valid positions.</span>
+            </article>
+            <article class="strip-item">
+              <strong>Validate at boundary</strong>
+              <span>Effect Schema checks unknown JSON before projection.</span>
+            </article>
+            <article class="strip-item">
+              <strong>Project on server</strong>
+              <span>The browser receives compact SVG paths, bounds, and districts grouped by state.</span>
+            </article>
+            <article class="strip-item">
+              <strong>Use district-mode camera</strong>
+              <span>The full map selects states; the selected district map owns zoom and pan.</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="coordinates" aria-labelledby="coordinates-title">
+          <div class="section-header">
+            <h2 id="coordinates-title">Decision: allow optional coordinate values</h2>
+            <p>
+              The position type is wider than the projection currently needs because valid GeoJSON
+              positions are not limited to exactly two numbers.
+            </p>
+          </div>
+
+          <div class="decision-grid">
+            <article class="decision-card">
+              <h3>Accepted</h3>
+              <div class="status-row">
+                <span class="status accepted">Current design</span>
+                <span class="status">Type contract</span>
+              </div>
+              <p>
+                Model a coordinate as <code>readonly [number, number, ...number[]]</code>. The
+                first two values are longitude and latitude. Extra values remain valid input.
+              </p>
+              <pre tabindex="0"><code>export type Position = readonly [number, number, ...number[]];</code></pre>
+            </article>
+
+            <article class="decision-card">
+              <h3>Rejected</h3>
+              <div class="status-row">
+                <span class="status rejected">Too narrow</span>
+                <span class="status">Exact tuple</span>
+              </div>
+              <p>
+                A strict <code>[number, number]</code> tuple would reject GeoJSON that includes an
+                altitude or another numeric dimension, even though the feature can safely ignore it.
+              </p>
+              <pre tabindex="0"><code>// Rejected because it is narrower than GeoJSON positions.
+type Position = readonly [number, number];</code></pre>
+            </article>
+
+            <article class="decision-card">
+              <h3>Runtime behavior</h3>
+              <div class="status-row">
+                <span class="status accepted">Projection input</span>
+                <span class="status">2D render</span>
+              </div>
+              <p>
+                The projection deliberately reads only longitude and latitude. Optional dimensions
+                are accepted at the boundary but do not influence the SVG map.
+              </p>
+              <pre tabindex="0"><code>const point = projection([position[0] ?? 0, position[1] ?? 0]);</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="geojson" aria-labelledby="geojson-title">
+          <div class="section-header">
+            <h2 id="geojson-title">Decision: keep GeoJSON handling narrow</h2>
+            <p>
+              The implementation does not try to become a general geospatial system. It accepts the
+              subset of GeoJSON needed by the map assets and chooses libraries by responsibility.
+            </p>
+          </div>
+
+          <div class="comparison">
+            <table class="data-table">
+              <caption>Library and responsibility choices</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Need</th>
+                  <th scope="col">Chosen path</th>
+                  <th scope="col">Reason</th>
+                  <th scope="col">Deferred alternative</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Parse GeoJSON</td>
+                  <td><code>Bun.file(...).json()</code></td>
+                  <td>GeoJSON is JSON, so native JSON parsing is enough for local assets.</td>
+                  <td>A parser package would add little value here.</td>
+                </tr>
+                <tr>
+                  <td>Validate runtime shape</td>
+                  <td><code>Effect Schema</code></td>
+                  <td>The project already uses Effect and the feature only accepts a narrow boundary subset.</td>
+                  <td><code>ajv</code> with GeoJSON JSON Schema for broader standards validation.</td>
+                </tr>
+                <tr>
+                  <td>Type GeoJSON values</td>
+                  <td>Local feature types, with <code>@types/geojson</code> available</td>
+                  <td>The feature contracts are intentionally shaped around the render model and supported geometry.</td>
+                  <td>Import more standard GeoJSON types if the feature grows beyond this subset.</td>
+                </tr>
+                <tr>
+                  <td>Project coordinates</td>
+                  <td><code>d3-geo</code></td>
+                  <td>It directly supports the Mercator projection and fits the SVG rendering problem.</td>
+                  <td>None needed for current projection work.</td>
+                </tr>
+                <tr>
+                  <td>Geospatial analysis</td>
+                  <td>Not included yet</td>
+                  <td>The feature currently needs projection, paths, and bounds, not containment, area, or topology operations.</td>
+                  <td><code>@turf/turf</code> or selected Turf modules when those operations become product requirements.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <details>
+            <summary>Why not use a full GeoJSON validation library now?</summary>
+            <div class="details-body">
+              <p>
+                A generic validator can confirm standard GeoJSON shape, but this feature needs a
+                product-specific boundary: feature collections with <code>Polygon</code> and
+                <code>MultiPolygon</code> only, loose properties, and specific name keys used later
+                by the renderer. The local Effect schema expresses that exact boundary and keeps
+                bad or unexpected files from reaching projection code.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section class="section" id="viewbox" aria-labelledby="viewbox-title">
+          <div class="section-header">
+            <h2 id="viewbox-title">Decision: focus states by changing the viewBox</h2>
+            <p>
+              State focus changes the SVG camera rectangle and switches the canvas into district
+              inspection mode. It does not enable zoom around the default full-map center.
+            </p>
+          </div>
+
+          <div class="two-column">
+            <article class="panel">
+              <h3>Why this is needed</h3>
+              <ul class="dense-list">
+                <li>
+                  <strong>District mode needs scale and position.</strong>
+                  <span>A smaller view box isolates the selected state. A different <code>minX</code> and <code>minY</code> moves the camera to that state.</span>
+                </li>
+                <li>
+                  <strong>Default-center zoom is wrong for edge states.</strong>
+                  <span>Keeping the full-map center would zoom into the middle of the map, not necessarily the clicked state.</span>
+                </li>
+                <li>
+                  <strong>Bounds give the target rectangle.</strong>
+                  <span><code>viewBoxForBounds</code> uses selected state bounds, aspect ratio, and coverage to build the focused camera.</span>
+                </li>
+              </ul>
+            </article>
+
+            <article class="panel">
+              <h3>Code path</h3>
+              <pre tabindex="0"><code>const targetViewBox = viewBoxForBounds(
+  state.bounds,
+  aspectRatio,
+  window.matchMedia("(max-width: 640px)").matches ? 0.76 : 0.84,
+);
+
+zoomBaseViewBoxRef.current = targetViewBox;
+animateViewBox(targetViewBox);</code></pre>
+              <p>
+                The selected-state camera becomes the district zoom baseline. Full-map pan and zoom
+                remain disabled until a state is selected.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="scrolling" aria-labelledby="scrolling-title">
+          <div class="section-header">
+            <h2 id="scrolling-title">Decision: reject CSS scale and scroll as the camera</h2>
+            <p>
+              Scaling and scrolling could produce a visible zoom effect, but it would move the DOM
+              viewport instead of the SVG map camera.
+            </p>
+          </div>
+
+          <div class="decision-grid">
+            <article class="decision-card">
+              <h3>Accepted camera model</h3>
+              <div class="status-row">
+                <span class="status accepted">One source of truth</span>
+                <span class="status">SVG coordinates</span>
+              </div>
+              <p>
+                Store one <code>Bounds</code> value as <code>viewBox</code>. State mode uses it to
+                frame India; district mode updates it for selected-state pan and zoom.
+              </p>
+              <pre tabindex="0"><code>viewBox: Bounds
+
+viewBox -&gt; "minX minY width height"</code></pre>
+            </article>
+
+            <article class="decision-card">
+              <h3>Rejected movement model</h3>
+              <div class="status-row">
+                <span class="status rejected">Extra coordinate layer</span>
+                <span class="status">Pixel scroll</span>
+              </div>
+              <p>
+                CSS scale plus scroll would require converting projected SVG coordinates into
+                layout pixels, then keeping scroll offsets, transform origins, hit testing, wheel
+                behavior, and keyboard movement aligned.
+              </p>
+              <pre tabindex="0"><code>// Rejected as primary model:
+content.style.transform = "scale(...)";
+scrollContainer.scrollTo(pixelX, pixelY);</code></pre>
+            </article>
+
+            <article class="decision-card">
+              <h3>Still needs bounds</h3>
+              <div class="status-row">
+                <span class="status watch">No real shortcut</span>
+                <span class="status">State center</span>
+              </div>
+              <p>
+                Centering a selected state still requires knowing the state bounds. Once those
+                bounds exist, using them directly as an SVG camera target is simpler than routing
+                district inspection through CSS pixels and scroll containers.
+              </p>
+              <pre tabindex="0"><code>state.bounds -&gt; viewBoxForBounds(...)
+state.bounds -&gt; pixel scroll math // avoid</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="consequences" aria-labelledby="consequences-title">
+          <div class="section-header">
+            <h2 id="consequences-title">Consequences</h2>
+            <p>
+              The accepted path makes some behavior easier and leaves a few deliberate constraints
+              in place.
+            </p>
+          </div>
+
+          <div class="comparison">
+            <table class="data-table">
+              <caption>Tradeoffs from the current decisions</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Area</th>
+                  <th scope="col">Benefit</th>
+                  <th scope="col">Constraint</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Validation</td>
+                  <td>Unknown file data is checked before path generation.</td>
+                  <td>The accepted GeoJSON subset must be updated if new geometry types are needed.</td>
+                </tr>
+                <tr>
+                  <td>Projection</td>
+                  <td>States and districts share one projection, so layers align.</td>
+                  <td>The server prepares paths before hydration, so file changes require a new server load.</td>
+                </tr>
+                <tr>
+                  <td>Interaction</td>
+                  <td>Selection is static in full-map mode; pointer, wheel, and keyboard movement are scoped to district mode.</td>
+                  <td>District camera math must stay in SVG coordinate space, background drags must not reset the map after panning, and reset should fade the full state set in before clearing selection.</td>
+                </tr>
+                <tr>
+                  <td>Accessibility</td>
+                  <td>Status text and state labels reflect the same selected camera state.</td>
+                  <td>Map-only behavior still needs structured alternatives as the product grows.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="callout">
+            <strong>Core rule that emerged</strong>
+            <p>
+              Keep data validation at the boundary, keep projection output serializable, and keep
+              district camera movement in SVG coordinates. That rule prevents parsing, rendering, and
+              interaction code from each carrying its own version of map state.
+            </p>
+          </div>
+        </section>
+
+        <section class="section" id="anchors" aria-labelledby="anchors-title">
+          <div class="section-header">
+            <h2 id="anchors-title">Code anchors</h2>
+            <p>
+              These files hold the implementation points behind the decisions recorded here.
+            </p>
+          </div>
+
+          <div class="decision-grid">
+            <article class="decision-card">
+              <h3><code>types.ts</code></h3>
+              <div class="status-row">
+                <span class="status">Contracts</span>
+              </div>
+              <p>
+                Defines <code>Position</code>, <code>Bounds</code>, <code>CanvasMapFeature</code>,
+                and <code>CanvasMap</code>. This is where optional coordinate dimensions and the
+                serializable render model are expressed.
+              </p>
+            </article>
+
+            <article class="decision-card">
+              <h3><code>schemas.ts</code></h3>
+              <div class="status-row">
+                <span class="status">Runtime validation</span>
+              </div>
+              <p>
+                Uses Effect Schema to validate the supported GeoJSON subset. The position schema
+                accepts longitude, latitude, and optional numeric dimensions.
+              </p>
+            </article>
+
+            <article class="decision-card">
+              <h3><code>utils.ts</code></h3>
+              <div class="status-row">
+                <span class="status">Projection</span>
+                <span class="status">Camera math</span>
+              </div>
+              <p>
+                Converts validated boundaries into SVG paths and bounds, then exposes helpers such
+                as <code>viewBoxForBounds</code>, <code>constrainViewBox</code>, and
+                <code>translateBounds</code>.
+              </p>
+            </article>
+
+            <article class="decision-card">
+              <h3><code>components/canvas.tsx</code></h3>
+              <div class="status-row">
+                <span class="status">Presentation</span>
+                <span class="status">Interaction</span>
+              </div>
+              <p>
+                Stores the active view box, switches between state and district modes, handles
+                district-only camera input from the whole selected-state surface, lazily renders
+                district layers, and announces user-visible status.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          Decision history for <code>src/features/canvas</code>. This file is standalone HTML with
+          plain CSS and can be opened directly next to <code>FEATURE.html</code>.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

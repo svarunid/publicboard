@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Feature Technical Journey | PublicBoard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.965 0 0);
+        --surface-raised: oklch(1 0 0);
+        --surface-code: oklch(0.94 0 0);
+        --ink: oklch(0.16 0 0);
+        --muted: oklch(0.39 0 0);
+        --faint: oklch(0.58 0 0);
+        --border: oklch(0.82 0 0);
+        --border-strong: oklch(0.64 0 0);
+        --focus: oklch(0.5 0.19 260);
+        --info: oklch(0.44 0.16 255);
+        --success: oklch(0.42 0.12 145);
+        --warning: oklch(0.55 0.12 78);
+        --error: oklch(0.47 0.16 25);
+        --map-green: oklch(0.88 0.06 145);
+        --map-blue: oklch(0.9 0.05 250);
+        --map-ochre: oklch(0.88 0.08 74);
+        --radius: 8px;
+        --radius-sm: 4px;
+        --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.14);
+        --measure: 72ch;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--info);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.18em;
+      }
+
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo,
+          monospace;
+      }
+
+      code {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-code);
+        padding: 0.08rem 0.28rem;
+        font-size: 0.88em;
+      }
+
+      pre {
+        max-inline-size: 100%;
+        margin: 0;
+        overflow: auto;
+        scrollbar-gutter: stable;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-code);
+        padding: 1rem;
+        font-size: 0.86rem;
+        line-height: 1.5;
+      }
+
+      .page {
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+        min-height: 100dvh;
+      }
+
+      .sidebar {
+        position: sticky;
+        inset-block-start: 0;
+        align-self: start;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        block-size: 100dvh;
+        overflow: auto;
+        border-inline-end: 1px solid var(--border);
+        background: var(--surface);
+        padding: 1.25rem;
+        scrollbar-gutter: stable;
+      }
+
+      .brand {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .brand strong {
+        font-size: 1rem;
+        font-weight: 650;
+        line-height: 1.25;
+      }
+
+      .brand span {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: 0.2rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nav-list a {
+        display: block;
+        border-radius: var(--radius-sm);
+        padding: 0.45rem 0.55rem;
+        color: var(--ink);
+        font-size: 0.88rem;
+        text-decoration: none;
+      }
+
+      .nav-list a:hover {
+        background: var(--surface-raised);
+      }
+
+      .content {
+        display: grid;
+        gap: 2rem;
+        inline-size: min(100%, 1240px);
+        margin-inline: auto;
+        padding: 2rem;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+        gap: 1.5rem;
+        align-items: stretch;
+        border-block-end: 1px solid var(--border);
+        padding-block-end: 2rem;
+      }
+
+      .hero-copy {
+        display: grid;
+        align-content: start;
+        gap: 1rem;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        color: var(--ink);
+        font-weight: 650;
+        letter-spacing: 0;
+        text-wrap: balance;
+      }
+
+      h1 {
+        max-inline-size: 16ch;
+        font-size: 2rem;
+        line-height: 1.15;
+      }
+
+      h2 {
+        font-size: 1.45rem;
+        line-height: 1.2;
+      }
+
+      h3 {
+        font-size: 1.08rem;
+        line-height: 1.3;
+      }
+
+      p {
+        max-inline-size: var(--measure);
+        margin: 0;
+        color: var(--muted);
+        text-wrap: pretty;
+      }
+
+      .lede {
+        color: var(--ink);
+        font-size: 1.02rem;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .metric {
+        display: grid;
+        gap: 0.25rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 0.9rem;
+      }
+
+      .metric span {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .metric strong {
+        color: var(--ink);
+        font-size: 1.25rem;
+        font-weight: 650;
+        line-height: 1.1;
+      }
+
+      .section {
+        display: grid;
+        gap: 1rem;
+        padding-block: 0.5rem;
+      }
+
+      .section-header {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .section-header p {
+        max-inline-size: 76ch;
+      }
+
+      .toc-note {
+        margin-block-start: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 0.75rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(145px, 1fr));
+        gap: 0.75rem;
+        align-items: stretch;
+      }
+
+      .flow-step {
+        position: relative;
+        display: grid;
+        gap: 0.55rem;
+        min-block-size: 170px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 0.9rem;
+      }
+
+      .flow-step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        inset-block-start: 50%;
+        inset-inline-end: -0.75rem;
+        inline-size: 0.75rem;
+        block-size: 1px;
+        background: var(--border-strong);
+      }
+
+      .step-index {
+        display: inline-grid;
+        place-items: center;
+        inline-size: 1.55rem;
+        block-size: 1.55rem;
+        border: 1px solid var(--border-strong);
+        border-radius: 999px;
+        color: var(--ink);
+        font-size: 0.78rem;
+        font-weight: 650;
+      }
+
+      .flow-step strong {
+        font-size: 0.95rem;
+        line-height: 1.25;
+      }
+
+      .flow-step p {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .map-visual {
+        display: grid;
+        gap: 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 1rem;
+      }
+
+      .map-frame {
+        position: relative;
+        min-block-size: 330px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: oklch(0.965 0.015 120);
+      }
+
+      .map-frame svg {
+        display: block;
+        inline-size: 100%;
+        block-size: 100%;
+        min-block-size: 330px;
+      }
+
+      .state-shape {
+        fill: var(--map-green);
+        stroke: var(--ink);
+        stroke-width: 1.4;
+      }
+
+      .district-line {
+        fill: none;
+        stroke: var(--faint);
+        stroke-width: 0.8;
+      }
+
+      .viewbox {
+        fill: none;
+        stroke: var(--warning);
+        stroke-dasharray: 8 7;
+        stroke-width: 2;
+      }
+
+      .map-caption {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        padding: 0.25rem 0.55rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .swatch {
+        inline-size: 0.75rem;
+        block-size: 0.75rem;
+        border: 1px solid var(--border-strong);
+        border-radius: 999px;
+      }
+
+      .swatch.state {
+        background: var(--map-green);
+      }
+
+      .swatch.district {
+        background: var(--faint);
+      }
+
+      .swatch.camera {
+        background: var(--warning);
+      }
+
+      .two-column {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .panel {
+        display: grid;
+        gap: 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 1rem;
+      }
+
+      .panel h3 {
+        padding-block-end: 0.55rem;
+        border-block-end: 1px solid var(--border);
+      }
+
+      .dense-list {
+        display: grid;
+        gap: 0.55rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .dense-list li {
+        display: grid;
+        gap: 0.2rem;
+        padding-block: 0.25rem;
+      }
+
+      .dense-list strong {
+        font-size: 0.92rem;
+      }
+
+      .dense-list span {
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .processor-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+
+      .processor {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        padding: 1rem;
+      }
+
+      .processor .path {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .processor ul {
+        display: grid;
+        gap: 0.4rem;
+        margin: 0;
+        padding-inline-start: 1.1rem;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .data-table {
+        inline-size: 100%;
+        border-collapse: collapse;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+        overflow: clip;
+        font-size: 0.9rem;
+      }
+
+      .data-table caption {
+        padding-block: 0.5rem;
+        color: var(--muted);
+        text-align: left;
+      }
+
+      .data-table th,
+      .data-table td {
+        border-block-end: 1px solid var(--border);
+        padding: 0.75rem;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .data-table th {
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 0.78rem;
+        font-weight: 650;
+      }
+
+      .data-table td {
+        color: var(--muted);
+      }
+
+      .data-table tr:last-child td {
+        border-block-end: 0;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 12rem minmax(0, 1fr);
+        gap: 1rem;
+        border-block-start: 1px solid var(--border);
+        padding-block-start: 0.85rem;
+      }
+
+      .timeline-item strong {
+        font-size: 0.9rem;
+      }
+
+      .timeline-item p {
+        font-size: 0.9rem;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: 1.65rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        padding-inline: 0.6rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      details {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface-raised);
+      }
+
+      summary {
+        cursor: pointer;
+        padding: 0.85rem 1rem;
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      details[open] summary {
+        border-block-end: 1px solid var(--border);
+      }
+
+      .details-body {
+        display: grid;
+        gap: 0.75rem;
+        padding: 1rem;
+      }
+
+      .callout {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 1rem;
+      }
+
+      .callout strong {
+        display: block;
+        margin-block-end: 0.3rem;
+      }
+
+      .footer {
+        border-block-start: 1px solid var(--border);
+        padding-block: 1.5rem 0.5rem;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      @media (max-width: 980px) {
+        .page {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          block-size: auto;
+          border-inline-end: 0;
+          border-block-end: 1px solid var(--border);
+        }
+
+        .nav-list {
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+
+        .toc-note {
+          margin-block-start: 0;
+        }
+
+        .hero,
+        .two-column {
+          grid-template-columns: 1fr;
+        }
+
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        .flow-step:not(:last-child)::after {
+          inset-block-start: auto;
+          inset-block-end: -0.75rem;
+          inset-inline-start: 50%;
+          inline-size: 1px;
+          block-size: 0.75rem;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .content {
+          padding: 1rem;
+        }
+
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .timeline-item {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          font-size: 1.75rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001ms;
+          animation-iteration-count: 1;
+          scroll-behavior: auto;
+          transition-duration: 0.001ms;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <aside class="sidebar">
+        <div class="brand">
+          <strong>Canvas feature</strong>
+          <span>End-to-end technical journey</span>
+        </div>
+        <nav aria-label="Report sections">
+          <ul class="nav-list">
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#data-sources">Data sources</a></li>
+            <li><a href="#server-path">Server path</a></li>
+            <li><a href="#render-model">Render model</a></li>
+            <li><a href="#route-handoff">Route handoff</a></li>
+            <li><a href="#client-runtime">Client runtime</a></li>
+            <li><a href="#interactions">Interactions</a></li>
+            <li><a href="#outputs">Outputs</a></li>
+            <li><a href="#tests">Tests</a></li>
+          </ul>
+        </nav>
+        <p class="toc-note">
+          This file is standalone HTML and CSS. It documents
+          <code>src/features/canvas</code> without depending on Tailwind or the app runtime.
+        </p>
+      </aside>
+
+      <main class="content">
+        <header class="hero" id="overview">
+          <div class="hero-copy">
+            <h1>How the canvas feature becomes an interactive India map</h1>
+            <p class="lede">
+              The canvas feature starts with Survey of India GeoJSON files on disk. It validates
+              them on the server, projects boundaries into SVG coordinates, serializes a compact
+              render model through the home route loader, then lets the client component switch
+              between a static state-selection map and a movable selected-state district map.
+            </p>
+            <div class="chip-row" aria-label="Primary implementation files">
+              <span class="chip">server/canvas.service.ts</span>
+              <span class="chip">server/canvas.queries.ts</span>
+              <span class="chip">utils.ts</span>
+              <span class="chip">schemas.ts</span>
+              <span class="chip">components/canvas.tsx</span>
+            </div>
+          </div>
+
+          <section class="map-visual" aria-labelledby="map-visual-title">
+            <div class="map-frame">
+              <svg viewBox="0 0 420 330" role="img" aria-labelledby="map-visual-title map-visual-desc">
+                <title id="map-visual-title">Simplified canvas camera diagram</title>
+                <desc id="map-visual-desc">
+                  A simplified map boundary, district lines, and a dashed camera view box.
+                </desc>
+                <rect width="420" height="330" fill="oklch(0.965 0.015 120)"></rect>
+                <path
+                  class="state-shape"
+                  d="M118 58 C165 35 229 50 260 88 C302 138 286 211 247 254 C204 299 123 282 91 230 C59 177 72 89 118 58 Z"
+                ></path>
+                <path class="district-line" d="M120 72 C150 112 169 136 210 152"></path>
+                <path class="district-line" d="M83 181 C136 168 186 177 267 205"></path>
+                <path class="district-line" d="M178 49 C186 104 178 180 154 276"></path>
+                <rect class="viewbox" x="93" y="48" width="210" height="225" rx="4"></rect>
+                <circle cx="198" cy="158" r="4" fill="var(--warning)"></circle>
+              </svg>
+            </div>
+            <div class="map-caption">
+              <h2>Feature shape</h2>
+              <p>
+                Server utilities produce SVG path strings and bounds. The client stores only a
+                changing view box, selected state name, focus state, drag state, and status text.
+              </p>
+              <div class="legend" aria-label="Diagram legend">
+                <span class="legend-item"><span class="swatch state"></span>State path</span>
+                <span class="legend-item"><span class="swatch district"></span>District overlay</span>
+                <span class="legend-item"><span class="swatch camera"></span>Camera view box</span>
+              </div>
+            </div>
+          </section>
+        </header>
+
+        <section class="section" aria-labelledby="at-a-glance">
+          <div class="section-header">
+            <h2 id="at-a-glance">At a glance</h2>
+            <p>
+              The feature is deliberately split between server preparation and client interaction.
+              GeoJSON never reaches the browser component. The browser receives render-ready state
+              paths plus districts grouped by state, then mounts district paths only after a state
+              is selected.
+            </p>
+          </div>
+          <div class="meta-grid">
+            <div class="metric">
+              <span>State features loaded</span>
+              <strong>40</strong>
+            </div>
+            <div class="metric">
+              <span>District features loaded</span>
+              <strong>808</strong>
+            </div>
+            <div class="metric">
+              <span>Accepted geometries</span>
+              <strong>Polygon, MultiPolygon</strong>
+            </div>
+            <div class="metric">
+              <span>Client render primitive</span>
+              <strong>SVG viewBox</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="journey">
+          <div class="section-header">
+            <h2 id="journey">End-to-end flow</h2>
+            <p>
+              The feature has five major handoff points. Each point reduces uncertainty before the
+              next layer uses the output.
+            </p>
+          </div>
+          <div class="flow" aria-label="Canvas feature pipeline">
+            <article class="flow-step">
+              <span class="step-index">1</span>
+              <strong>Local map files</strong>
+              <p>
+                <code>Bun.file(...).json()</code> reads state and district GeoJSON from
+                <code>public/maps/survey-of-india</code>.
+              </p>
+            </article>
+            <article class="flow-step">
+              <span class="step-index">2</span>
+              <strong>Effect schema boundary</strong>
+              <p>
+                <code>Schema.decodeUnknownSync</code> proves the JSON is a feature collection with
+                supported geometry.
+              </p>
+            </article>
+            <article class="flow-step">
+              <span class="step-index">3</span>
+              <strong>Projection utilities</strong>
+              <p>
+                <code>prepareMap</code> creates a Mercator projection, path strings, feature bounds,
+                and the padded base view box.
+              </p>
+            </article>
+            <article class="flow-step">
+              <span class="step-index">4</span>
+              <strong>Route loader</strong>
+              <p>
+                <code>loadCanvasMap</code> returns <code>{ renderMap }</code>. The home route passes
+                it directly into <code>&lt;Canvas map={...} /&gt;</code>.
+              </p>
+            </article>
+            <article class="flow-step">
+              <span class="step-index">5</span>
+              <strong>Interactive SVG</strong>
+              <p>
+                The client first renders only states. After selection it isolates one state, mounts
+                that state's district layer, enables district pan/zoom, and announces status.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="data-sources" aria-labelledby="data-sources-title">
+          <div class="section-header">
+            <h2 id="data-sources-title">Data sources</h2>
+            <p>
+              The starting point is not a network call or database query. It is two local GeoJSON
+              files loaded by a server-only service.
+            </p>
+          </div>
+
+          <table class="data-table">
+            <caption>
+              Files consumed by <code>loadCanvasMapService</code>
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">File</th>
+                <th scope="col">Feature count</th>
+                <th scope="col">Name key used later</th>
+                <th scope="col">Accepted geometry types present</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>public/maps/survey-of-india/india-states.geojson</code></td>
+                <td>40</td>
+                <td><code>STATE</code></td>
+                <td><code>MultiPolygon</code>, <code>Polygon</code></td>
+              </tr>
+              <tr>
+                <td><code>public/maps/survey-of-india/india-districts.geojson</code></td>
+                <td>808</td>
+                <td><code>DISTRICT</code></td>
+                <td><code>MultiPolygon</code>, <code>Polygon</code></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="two-column">
+            <article class="panel">
+              <h3>Boundary input contract</h3>
+              <ul class="dense-list">
+                <li>
+                  <strong><code>BoundaryFeatureCollection</code></strong>
+                  <span>A GeoJSON feature collection with a readonly feature list.</span>
+                </li>
+                <li>
+                  <strong><code>BoundaryFeature</code></strong>
+                  <span>A feature with a loose property bag and supported geometry.</span>
+                </li>
+                <li>
+                  <strong><code>BoundaryGeometry</code></strong>
+                  <span>Only <code>Polygon</code> and <code>MultiPolygon</code> are allowed.</span>
+                </li>
+                <li>
+                  <strong><code>Position</code></strong>
+                  <span>At least longitude and latitude, with optional extra numeric values.</span>
+                </li>
+              </ul>
+            </article>
+
+            <article class="panel">
+              <h3>Validation behavior</h3>
+              <p>
+                <code>BoundaryFeatureCollectionSchema</code> mirrors this narrow GeoJSON subset.
+                The decoder is synchronous because the service has already awaited file reads and
+                fails fast before projection or path generation can run on malformed data.
+              </p>
+              <pre tabindex="0"><code>const decodeBoundaryFeatureCollection =
+  Schema.decodeUnknownSync(BoundaryFeatureCollectionSchema);</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="server-path" aria-labelledby="server-path-title">
+          <div class="section-header">
+            <h2 id="server-path-title">Server path</h2>
+            <p>
+              Server code does the expensive and risky work: file IO, runtime validation,
+              projection setup, and SVG path generation. This keeps the browser payload compact and
+              avoids client-side GeoJSON parsing.
+            </p>
+          </div>
+
+          <div class="processor-grid">
+            <article class="processor">
+              <h3><code>loadCanvasMapService</code></h3>
+              <span class="path">src/features/canvas/server/canvas.service.ts</span>
+              <ul>
+                <li>Starts both file reads with <code>Promise.all</code>.</li>
+                <li>Loads state and district JSON through Bun file APIs.</li>
+                <li>Decodes both unknown JSON values with the Effect schema.</li>
+                <li>Calls <code>prepareMap(states, districts)</code>.</li>
+                <li>Returns <code>{ renderMap }</code> for the route loader.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3><code>prepareMap</code></h3>
+              <span class="path">src/features/canvas/utils.ts</span>
+              <ul>
+                <li>Builds one Mercator projection from state boundaries.</li>
+                <li>Renders each state with the <code>STATE</code> property key.</li>
+                <li>Renders each district with the <code>DISTRICT</code> property key.</li>
+                <li>Groups districts by the matched state name, including the Andaman source alias.</li>
+                <li>Merges rendered state bounds into a full map extent.</li>
+                <li>Adds 18 SVG units of padding to produce <code>baseViewBox</code>.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3><code>createMapProjection</code></h3>
+              <span class="path">src/features/canvas/utils.ts</span>
+              <ul>
+                <li>Uses <code>geoMercator().scale(1).translate([0, 0])</code> as a measuring pass.</li>
+                <li>Projects every state coordinate into temporary bounds.</li>
+                <li>Fits the projected bounds inside a 1000 unit SVG coordinate space.</li>
+                <li>Applies 24 units of internal padding.</li>
+                <li>Returns a final projection reused by both state and district layers.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3><code>renderFeature</code></h3>
+              <span class="path">src/features/canvas/utils.ts</span>
+              <ul>
+                <li>Delegates geometry conversion to <code>renderGeometry</code>.</li>
+                <li>Extracts the display name with <code>propertyString</code>.</li>
+                <li>Falls back to <code>Boundary {index + 1}</code> when the name is missing.</li>
+                <li>Builds a stable serializable feature object.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3><code>renderGeometry</code></h3>
+              <span class="path">src/features/canvas/utils.ts</span>
+              <ul>
+                <li>Normalizes <code>Polygon</code> into a one-item polygon list.</li>
+                <li>Iterates each ring and skips empty rings.</li>
+                <li>Projects the first point into an <code>Mx,y</code> command.</li>
+                <li>Projects remaining points into <code>Lx,y</code> commands.</li>
+                <li>Closes each ring with <code>Z</code> and returns bounds plus path.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3><code>loadCanvasMap</code></h3>
+              <span class="path">src/features/canvas/server/canvas.queries.ts</span>
+              <ul>
+                <li>Defines a TanStack Start server function with method <code>GET</code>.</li>
+                <li>Acts as a thin route-facing query wrapper.</li>
+                <li>Keeps service details out of route files.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="render-model" aria-labelledby="render-model-title">
+          <div class="section-header">
+            <h2 id="render-model-title">Render model</h2>
+            <p>
+              The output of server preparation is a serializable model tailored to SVG rendering and
+              camera math.
+            </p>
+          </div>
+
+          <div class="two-column">
+            <article class="panel">
+              <h3><code>CanvasMapFeature</code></h3>
+              <pre tabindex="0"><code>type CanvasMapFeature = {
+  id: string;
+  name: string;
+  path: string;
+  bounds: Bounds;
+};</code></pre>
+              <p>
+                The path is ready to assign to an SVG <code>&lt;path d="..."&gt;</code>. The bounds let
+                the client focus a state without retaining original GeoJSON coordinates.
+              </p>
+            </article>
+
+            <article class="panel">
+              <h3><code>CanvasMap</code></h3>
+<pre tabindex="0"><code>type CanvasMap = {
+  states: CanvasMapFeature[];
+  districtsByState: Record&lt;string, CanvasMapFeature[]&gt;;
+  baseViewBox: Bounds;
+};</code></pre>
+              <p>
+                This object is passed through TanStack Start serialization. Districts remain
+                render-ready, but are grouped so the client mounts only the selected state's layer.
+              </p>
+            </article>
+          </div>
+
+          <table class="data-table">
+            <caption>Utility outputs and where they are consumed</caption>
+            <thead>
+              <tr>
+                <th scope="col">Function</th>
+                <th scope="col">Output</th>
+                <th scope="col">Consumer</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>prepareMap</code></td>
+                <td><code>CanvasMap</code> with state paths, grouped district paths, and <code>baseViewBox</code></td>
+                <td><code>loadCanvasMapService</code>, then the route loader</td>
+              </tr>
+              <tr>
+                <td><code>renderGeometry</code></td>
+                <td>SVG path command string and projected bounds</td>
+                <td><code>renderFeature</code></td>
+              </tr>
+              <tr>
+                <td><code>viewBoxForBounds</code></td>
+                <td>A bounds object sized to frame a target at a requested coverage</td>
+                <td>Full-map measurement, selected-state isolation, reset behavior</td>
+              </tr>
+              <tr>
+                <td><code>constrainViewBox</code></td>
+                <td>A camera box clamped inside the active map extent</td>
+                <td>District-mode drag panning, keyboard panning, and zooming</td>
+              </tr>
+              <tr>
+                <td><code>translateBounds</code></td>
+                <td>A moved bounds object with unchanged dimensions</td>
+                <td><code>panViewBox</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="route-handoff" aria-labelledby="route-handoff-title">
+          <div class="section-header">
+            <h2 id="route-handoff-title">Route handoff</h2>
+            <p>
+              The route files remain entry points. They load data, compose the page, and avoid
+              owning map transformation logic.
+            </p>
+          </div>
+
+          <div class="timeline">
+            <article class="timeline-item">
+              <strong><code>src/routes/__root.tsx</code></strong>
+              <p>
+                Adds the root document and app scripts only. Browser zoom shortcuts are not
+                intercepted before hydration; hydrated district mode owns its own canvas zoom
+                shortcuts.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong><code>src/routes/index.tsx</code></strong>
+              <p>
+                Defines the home route. Its loader calls <code>loadCanvasMap()</code>. The component
+                reads <code>renderMap</code> from <code>Route.useLoaderData()</code> and renders
+                <code>&lt;Canvas map={renderMap} /&gt;</code>.
+              </p>
+            </article>
+            <article class="timeline-item">
+              <strong><code>Canvas</code> component boundary</strong>
+              <p>
+                Receives a fully prepared <code>CanvasMap</code>. From this point forward, the code
+                is about interaction state and presentation, not data loading.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="client-runtime" aria-labelledby="client-runtime-title">
+          <div class="section-header">
+            <h2 id="client-runtime-title">Client runtime</h2>
+            <p>
+              The component is marked <code>"use client"</code>. It renders the map and manages a
+              small runtime state machine around camera, interaction, and announcements.
+            </p>
+          </div>
+
+          <div class="two-column">
+            <article class="panel">
+              <h3>React state</h3>
+              <ul class="dense-list">
+                <li>
+                  <strong><code>viewBox</code></strong>
+                  <span>The visible SVG camera. Converted to the SVG <code>viewBox</code> string.</span>
+                </li>
+                <li>
+                  <strong><code>selectedState</code></strong>
+                  <span>State name that switches the canvas from full state selection into district inspection mode.</span>
+                </li>
+                <li>
+                  <strong><code>focusedState</code></strong>
+                  <span>State name used to visually mirror keyboard focus.</span>
+                </li>
+                <li>
+                  <strong><code>isDragging</code></strong>
+                  <span>Switches the map cursor between grab and grabbing.</span>
+                </li>
+                <li>
+                  <strong><code>status</code></strong>
+                  <span>Accessible status text used by the SVG label and screen-reader live region.</span>
+                </li>
+              </ul>
+            </article>
+
+            <article class="panel">
+              <h3>Refs for fast interaction</h3>
+              <ul class="dense-list">
+                <li>
+                  <strong><code>viewBoxRef</code></strong>
+                  <span>Latest camera value for selected-state wheel, key, drag, and animation calculations.</span>
+                </li>
+                <li>
+                  <strong><code>zoomBaseViewBoxRef</code></strong>
+                  <span>Active camera baseline: full map in state mode, selected-state fit in district mode.</span>
+                </li>
+                <li>
+                  <strong><code>dragStateRef</code></strong>
+                  <span>Pointer id, movement history, and drag threshold for district-map panning.</span>
+                </li>
+                <li>
+                  <strong><code>cameraAnimationRef</code></strong>
+                  <span>Current animation frame id so direct actions can cancel in-flight tweens.</span>
+                </li>
+                <li>
+                  <strong><code>suppressNextClickRef</code></strong>
+                  <span>Prevents a drag-generated click from resetting or selecting unexpectedly.</span>
+                </li>
+              </ul>
+            </article>
+          </div>
+
+          <details>
+            <summary>How the component presents the render model</summary>
+            <div class="details-body">
+              <p>
+                The SVG root receives the computed <code>viewBox</code> string. A background
+                rectangle fills the active camera area. State features render first as interactive
+                paths with <code>role="button"</code>, labels, keyboard handlers, focus handlers,
+                fill colors, and selection strokes. District features are not mounted in the
+                initial state map. After a state is selected, only that state remains visible and
+                its district layer renders in a <code>pointerEvents="none"</code> group.
+              </p>
+              <p>
+                Zoom controls sit in a fixed bottom-right control group only in district mode. The
+                percentage label is a live status. A separate screen-reader-only paragraph announces
+                state selection, district panning, reset, and district zoom changes.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section class="section" id="interactions" aria-labelledby="interactions-title">
+          <div class="section-header">
+            <h2 id="interactions-title">Interaction processors</h2>
+            <p>
+              All user interactions end by updating the same camera model: a constrained bounds
+              object rendered through the SVG <code>viewBox</code>.
+            </p>
+          </div>
+
+          <table class="data-table">
+            <caption>Input events, processors, and user-visible output</caption>
+            <thead>
+              <tr>
+                <th scope="col">User action</th>
+                <th scope="col">Functions involved</th>
+                <th scope="col">Logic</th>
+                <th scope="col">Output</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Click a state path</td>
+                <td><code>selectState</code>, <code>viewBoxForBounds</code>, <code>animateViewBox</code></td>
+                <td>Compute an isolated camera around the state bounds, set that camera as the district zoom baseline, and mount only that state's districts.</td>
+                <td>Only the selected state remains visible; status text such as <code>TAMIL NADU selected</code>.</td>
+              </tr>
+              <tr>
+                <td>Click outside selected state</td>
+                <td><code>handleCanvasClick</code>, <code>resetMap</code>, <code>measureFullMapViewBox</code></td>
+                <td>Ignore drag-synthesized clicks. Otherwise mount the full state set at zero opacity, fade non-selected states in, and animate the camera back to the full-map frame before clearing selection and unmounting districts.</td>
+                <td>Smooth full-map camera transition, state fade-in, and status <code>Showing all India states and union territories</code>.</td>
+              </tr>
+              <tr>
+                <td>Drag in district mode</td>
+                <td><code>handleCanvasPointerDown</code>, <code>handleCanvasPointerMove</code>, <code>panViewBox</code></td>
+                <td>Start drags from the district map surface, convert screen delta into SVG delta, then clamp to the selected-state extent.</td>
+                <td>Panned selected-state camera, status <code>District map panned</code>, grabbing cursor.</td>
+              </tr>
+              <tr>
+                <td>Arrow keys in district mode</td>
+                <td><code>handleCanvasKeyDown</code>, <code>panViewBox</code></td>
+                <td>Move by 8 percent of the current camera width or height, then clamp the result.</td>
+                <td>Panned district camera and live status update.</td>
+              </tr>
+              <tr>
+                <td>Ctrl or Cmd plus/minus in district mode</td>
+                <td><code>handleCanvasKeyDown</code>, window key listener, <code>updateZoomByScale</code></td>
+                <td>Apply a multiplicative 1.1 scale step. Browser zoom is prevented only while a state is selected.</td>
+                <td>District camera zoom and status such as <code>District map zoom 110%</code>.</td>
+              </tr>
+              <tr>
+                <td>Wheel gesture in district mode</td>
+                <td><code>zoomByWheel</code>, <code>updateZoomByScale</code></td>
+                <td>Uses a non-passive wheel listener only after selection. Converts delta to exponential scale.</td>
+                <td>Smooth selected-state zoom, clamped between 100 and 650 percent.</td>
+              </tr>
+              <tr>
+                <td>Zoom button in district mode</td>
+                <td><code>updateZoomByScale</code>, <code>updateZoomToPercent</code></td>
+                <td>Uses the same multiplicative scale path as keyboard zoom.</td>
+                <td>Updated view box and visible zoom status in the control group.</td>
+              </tr>
+              <tr>
+                <td>Escape in district mode</td>
+                <td><code>handleCanvasKeyDown</code>, <code>resetMap</code></td>
+                <td>Runs the same animated reset path as an outside click.</td>
+                <td>Other states fade in during the camera animation; district paths unmount after the animation completes.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="outputs" aria-labelledby="outputs-title">
+          <div class="section-header">
+            <h2 id="outputs-title">Outputs to processors and users</h2>
+            <p>
+              The feature emits outputs at three levels: data objects for downstream code, DOM
+              attributes for SVG rendering, and interface feedback for users.
+            </p>
+          </div>
+
+          <div class="processor-grid">
+            <article class="processor">
+              <h3>Server output</h3>
+              <span class="path"><code>{ renderMap: CanvasMap }</code></span>
+              <ul>
+                <li>Consumed by the TanStack Start loader result.</li>
+                <li>Serializable into the SSR payload.</li>
+                <li>Contains no GeoJSON coordinates after projection.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3>Render output</h3>
+              <span class="path">SVG nodes and attributes</span>
+              <ul>
+                <li><code>viewBox</code> changes create district-mode pan and zoom.</li>
+                <li>State <code>d</code> attributes draw boundaries.</li>
+                <li>Grouped district <code>d</code> attributes draw non-interactive overlays only after selection.</li>
+                <li>Stroke width and color represent focus or selection.</li>
+              </ul>
+            </article>
+
+            <article class="processor">
+              <h3>Accessible output</h3>
+              <span class="path">Labels and live regions</span>
+              <ul>
+                <li>The canvas section has <code>role="application"</code> and keyboard shortcuts.</li>
+                <li>The SVG role is <code>img</code>, labelled by current status.</li>
+                <li>Each state path has a button role and state name.</li>
+                <li>Status updates are mirrored in an <code>aria-live="polite"</code> region.</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="callout">
+            <strong>Important implementation choice</strong>
+            <p>
+              <code>baseViewBox</code> still frames the full state-selection map. Once a state is
+              selected, the selected state's fitted view box becomes the district zoom baseline and
+              pan extent, so users cannot drag the district map into the rest of India.
+            </p>
+          </div>
+        </section>
+
+        <section class="section" id="tests" aria-labelledby="tests-title">
+          <div class="section-header">
+            <h2 id="tests-title">Tests and verified behavior</h2>
+            <p>
+              The canvas test file builds miniature GeoJSON fixtures, validates them with the same
+              Effect schema, passes them through <code>prepareMap</code>, and renders the real
+              component.
+            </p>
+          </div>
+
+          <table class="data-table">
+            <caption><code>src/features/canvas/components/canvas.test.tsx</code></caption>
+            <thead>
+              <tr>
+                <th scope="col">Test</th>
+                <th scope="col">What it proves</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Starts as a state selection map without districts or zoom controls</td>
+                <td>The initial DOM contains state buttons only; district paths and zoom controls are absent.</td>
+              </tr>
+              <tr>
+                <td>Selects a state by isolating it and lazily mounting only its districts</td>
+                <td>State selection hides other states, mounts the selected state's district layer, and shows district zoom controls.</td>
+              </tr>
+              <tr>
+                <td>Returns to the state map when clicking outside the selected state</td>
+                <td>Background click starts the full-map camera animation, fades the hidden states back in, and clears selection after the animation completes.</td>
+              </tr>
+              <tr>
+                <td>Does not pan or zoom the full state map</td>
+                <td>Wheel, platform shortcuts, and arrow keys do not move the initial map.</td>
+              </tr>
+              <tr>
+                <td>Enables zoom, keyboard pan, pointer drag, and Escape reset in district mode</td>
+                <td>District mode owns camera movement and the keyboard reset path.</td>
+              </tr>
+              <tr>
+                <td>Fades the full state map back in during reset</td>
+                <td>Deselecting by outside click or Escape mounts the full state set at zero opacity, reveals it on the next animation frame, and keeps districts mounted until the zoom-out finishes.</td>
+              </tr>
+              <tr>
+                <td>Pans the district map when dragging from the focused state's background</td>
+                <td>Dragging from empty selected-state camera space moves the district view instead of requiring the pointer to begin over the state path.</td>
+              </tr>
+              <tr>
+                <td>Groups district render features by state and applies explicit source aliases</td>
+                <td><code>prepareMap</code> groups districts for lazy mounting and maps the Andaman source-name mismatch.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" aria-labelledby="responsibility-title">
+          <div class="section-header">
+            <h2 id="responsibility-title">Responsibility boundaries</h2>
+            <p>
+              The feature follows the project architecture by keeping route files thin, map
+              preparation in server-side modules, reusable math in pure utilities, and interaction
+              state inside the client component.
+            </p>
+          </div>
+
+          <div class="two-column">
+            <article class="panel">
+              <h3>Server owns</h3>
+              <ul class="dense-list">
+                <li><span>Local file IO through Bun.</span></li>
+                <li><span>Runtime schema validation with Effect.</span></li>
+                <li><span>Projection and SVG path generation.</span></li>
+                <li><span>Construction of the serializable grouped render model.</span></li>
+              </ul>
+            </article>
+
+            <article class="panel">
+              <h3>Client owns</h3>
+              <ul class="dense-list">
+                <li><span>SVG presentation of prepared paths.</span></li>
+                <li><span>State-selection mode and selected-state district mode.</span></li>
+                <li><span>District-only camera state, zoom percentage, panning, and lazy district rendering.</span></li>
+                <li><span>Visible selection, Escape reset, and accessible status updates.</span></li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          Report generated for <code>src/features/canvas</code>. Source reviewed:
+          <code>schemas.ts</code>, <code>types.ts</code>, <code>utils.ts</code>,
+          <code>server/canvas.service.ts</code>, <code>server/canvas.queries.ts</code>,
+          <code>components/canvas.tsx</code>, <code>components/canvas.test.tsx</code>,
+          <code>src/routes/index.tsx</code>, and <code>src/routes/__root.tsx</code>.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

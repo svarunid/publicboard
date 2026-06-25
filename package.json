@@ -17,7 +17,8 @@
     "test:watch": "bun --bun vitest watch",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "doctor": "react-doctor"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -49,6 +50,7 @@
     "@vitejs/plugin-react": "latest",
     "drizzle-kit": "1.0.0-rc.3",
     "jsdom": "latest",
+    "react-doctor": "^0.5.8",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "latest"

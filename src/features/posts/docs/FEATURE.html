@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posts Feature Technical Journey | PublicBoard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.965 0 0);
+        --raised: oklch(1 0 0);
+        --code: oklch(0.94 0 0);
+        --ink: oklch(0.16 0 0);
+        --muted: oklch(0.39 0 0);
+        --border: oklch(0.82 0 0);
+        --focus: oklch(0.5 0.19 260);
+        --warning: oklch(0.55 0.12 78);
+        --success: oklch(0.42 0.12 145);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.55; }
+      .page { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); min-height: 100dvh; }
+      .sidebar { position: sticky; top: 0; height: 100dvh; overflow: auto; border-right: 1px solid var(--border); background: var(--surface); padding: 1.25rem; }
+      .content { display: grid; gap: 1.5rem; width: min(100%, 1180px); margin-inline: auto; padding: 2rem; }
+      h1, h2, h3 { margin: 0; letter-spacing: 0; line-height: 1.2; text-wrap: balance; }
+      h1 { font-size: 2rem; }
+      h2 { font-size: 1.35rem; }
+      h3 { font-size: 1.05rem; }
+      p { max-width: 74ch; margin: 0; color: var(--muted); text-wrap: pretty; }
+      a { color: inherit; text-underline-offset: 0.18em; }
+      a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+      code { border: 1px solid var(--border); border-radius: 4px; background: var(--code); padding: 0.08rem 0.28rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.88em; }
+      .nav { display: grid; gap: 0.35rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+      .nav a { display: block; border-radius: 4px; padding: 0.4rem 0.5rem; text-decoration: none; }
+      .nav a:hover { background: var(--raised); }
+      .section { display: grid; gap: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); padding: 1rem; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+      .item { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0.8rem; }
+      .item strong { display: block; margin-bottom: 0.2rem; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+      .chip { border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 0.18rem 0.55rem; font-size: 0.86rem; }
+      .warning { border-color: color-mix(in oklch, var(--warning), var(--border)); }
+      .success { border-color: color-mix(in oklch, var(--success), var(--border)); }
+      @media (max-width: 900px) { .page { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); } .content { padding: 1rem; } .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <aside class="sidebar">
+        <strong>Posts</strong>
+        <p>Incident creation flow for PublicBoard.</p>
+        <ul class="nav">
+          <li><a href="#journey">Journey</a></li>
+          <li><a href="#data">Data Interface</a></li>
+          <li><a href="#ui">User Interface</a></li>
+          <li><a href="#tests">Tests</a></li>
+          <li><a href="#gaps">Known Gaps</a></li>
+        </ul>
+      </aside>
+      <main class="content">
+        <section class="section" id="journey">
+          <h1>Post Creation Technical Journey</h1>
+          <p>A post records a public incident with evidence, time, location, and ministry board classification. The home route composes the existing map canvas with a post creation overlay; post logic stays in the posts feature.</p>
+          <div class="chips">
+            <span class="chip">TanStack Start server function</span>
+            <span class="chip">Drizzle SQLite</span>
+            <span class="chip">Effect Schema boundary</span>
+            <span class="chip">Local evidence upload</span>
+          </div>
+        </section>
+
+        <section class="section" id="data">
+          <h2>Data Interface</h2>
+          <div class="grid">
+            <div class="item">
+              <strong>Location hierarchy</strong>
+              <p><code>country</code> is required. <code>state</code> and <code>district</code> are optional, and district cannot be selected without state.</p>
+            </div>
+            <div class="item">
+              <strong>Board derivation</strong>
+              <p>Country-only posts use Union ministries. Any selected state or union territory uses a state-level department list for that jurisdiction, with or without district.</p>
+            </div>
+            <div class="item">
+              <strong>Post table</strong>
+              <p>The SQLite table stores title, description, board, evidence URI, evidence type, country, nullable state, nullable district, timestamp, and audit timestamps.</p>
+            </div>
+            <div class="item">
+              <strong>Evidence</strong>
+              <p>Links are stored directly. File evidence is written to <code>data/uploads/post-evidence</code> and stored as a generated evidence URI.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="ui">
+          <h2>User Interface</h2>
+          <p>A fixed rounded bordered <code>+</code> button is centered near the bottom of the viewport. It opens a bordered right-side pane with a labeled form, country/state/district selectors, derived board selector, evidence input, and side-by-side date and time controls. The file evidence control presents a visible choose-file segment, a divider, and a filename display segment while the underlying native file input remains accessible and handles form submission. The date control opens a shadcn calendar popover; the time control defaults to the current clock time.</p>
+        </section>
+
+        <section class="section success" id="tests">
+          <h2>Tests</h2>
+          <p>Coverage includes location-to-board resolution, district validation, schema validation, Drizzle persistence, evidence upload cleanup, evidence route validation, and post creation pane behavior.</p>
+        </section>
+
+        <section class="section warning" id="gaps">
+          <h2>Known Gaps</h2>
+          <p>The constants module provides a board list for every Indian state and union territory so the form and validation work end-to-end. Union ministries are source-marked as verified; most state-level lists currently use a standard department taxonomy with incomplete source metadata until each jurisdiction is verified against official government sources.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -54,7 +54,13 @@ const CAMERA_ANIMATION_DURATION_MS = 180;
  * the component mounts only that state's district layer and enables district
  * map camera controls.
  */
-export function Canvas({ map }: { map: CanvasMap }) {
+export function Canvas({
+  map,
+  onSelectedStateChange,
+}: {
+  map: CanvasMap;
+  onSelectedStateChange?: (stateName: string | null) => void;
+}) {
   const [viewBox, setViewBoxState] = React.useState<Bounds>(() => map.baseViewBox);
   const [selectedStateName, setSelectedStateName] = React.useState<string | null>(null);
   const [focusedState, setFocusedState] = React.useState<string | null>(null);
@@ -80,7 +86,8 @@ export function Canvas({ map }: { map: CanvasMap }) {
 
   React.useEffect(() => {
     selectedStateNameRef.current = selectedStateName;
-  }, [selectedStateName]);
+    onSelectedStateChange?.(selectedStateName);
+  }, [onSelectedStateChange, selectedStateName]);
 
   /** Stop any in-flight camera tween before a direct pan or new zoom target. */
   const cancelCameraAnimation = React.useCallback(() => {

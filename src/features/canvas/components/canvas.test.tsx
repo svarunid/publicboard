@@ -121,7 +121,8 @@ describe("Canvas", () => {
   });
 
   it("selects a state by isolating it and lazily mounting only its districts", async () => {
-    renderCanvasMap();
+    const onSelectedStateChange = vi.fn();
+    renderCanvasMap({ onSelectedStateChange });
 
     fireEvent.click(screen.getByRole("button", { name: "TAMIL NADU" }));
 
@@ -135,6 +136,7 @@ describe("Canvas", () => {
     expect(screen.getAllByTestId("map-district")).toHaveLength(1);
     expect(screen.getByRole("group", { name: "Map zoom controls" })).toBeDefined();
     expect(screen.getByRole("status", { name: "District map zoom 100%" })).toBeDefined();
+    expect(onSelectedStateChange).toHaveBeenLastCalledWith("TAMIL NADU");
   });
 
   it("returns to the state map when clicking outside the selected state", async () => {
@@ -314,8 +316,8 @@ describe("Canvas", () => {
   });
 });
 
-function renderCanvasMap() {
-  return render(<Canvas map={createMapFixture()} />);
+function renderCanvasMap(props?: { onSelectedStateChange?: (stateName: string | null) => void }) {
+  return render(<Canvas map={createMapFixture()} {...props} />);
 }
 
 function createMapFixture() {

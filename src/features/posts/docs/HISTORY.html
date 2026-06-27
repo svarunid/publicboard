@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posts Feature Decision History | PublicBoard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.985 0 0);
+        --surface: oklch(0.965 0 0);
+        --raised: oklch(1 0 0);
+        --code: oklch(0.94 0 0);
+        --ink: oklch(0.16 0 0);
+        --muted: oklch(0.39 0 0);
+        --border: oklch(0.82 0 0);
+        --focus: oklch(0.5 0.19 260);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.55; }
+      .page { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); min-height: 100dvh; }
+      .sidebar { position: sticky; top: 0; height: 100dvh; overflow: auto; border-right: 1px solid var(--border); background: var(--surface); padding: 1.25rem; }
+      .content { display: grid; gap: 1rem; width: min(100%, 1000px); margin-inline: auto; padding: 2rem; }
+      h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: 0; text-wrap: balance; }
+      h1 { font-size: 2rem; }
+      h2 { font-size: 1.3rem; }
+      p { max-width: 74ch; margin: 0; color: var(--muted); text-wrap: pretty; }
+      code { border: 1px solid var(--border); border-radius: 4px; background: var(--code); padding: 0.08rem 0.28rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.88em; }
+      .entry { display: grid; gap: 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); padding: 1rem; }
+      .meta { color: var(--muted); font-size: 0.9rem; }
+      @media (max-width: 900px) { .page { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); } .content { padding: 1rem; } }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <aside class="sidebar">
+        <strong>Posts History</strong>
+        <p>Implementation decisions and later changes.</p>
+      </aside>
+      <main class="content">
+        <section class="entry">
+          <h1>Initial Boards & Post Implementation</h1>
+          <p class="meta">2026-06-27</p>
+          <p>Added the first post creation slice with location-aware board resolution, Effect Schema validation, SQLite persistence, local evidence uploads, a safe evidence reader, and a floating creation pane over the map.</p>
+        </section>
+        <section class="entry">
+          <h2>Location Model</h2>
+          <p>The task clarified that location is not one enum. It is a hierarchy: required country, optional state or union territory, and optional district. The database therefore stores <code>country</code>, <code>state</code>, and <code>district</code> separately.</p>
+        </section>
+        <section class="entry">
+          <h2>Evidence Storage</h2>
+          <p>Local upload support was selected for v1. Uploaded files are stored under git-ignored <code>data/uploads/post-evidence</code> with generated filenames, while the post row stores only the evidence URI.</p>
+        </section>
+        <section class="entry">
+          <h2>Board Source Data</h2>
+          <p>The board constants include source metadata and status. Union ministries are represented as verified country-level boards. Every state and union territory receives a state-level department board set so the UI and validation paths work consistently, while jurisdictions that still need official department-by-department verification remain marked as incomplete.</p>
+        </section>
+        <section class="entry">
+          <h2>Evidence Extension Normalization</h2>
+          <p>Uploaded evidence filenames now use the extension implied by the validated content type instead of preserving the user's original filename extension. This keeps generated evidence URIs readable by the evidence-serving route even when the uploaded filename has a misleading extension.</p>
+        </section>
+        <section class="entry">
+          <h2>Timestamp Control Refinement</h2>
+          <p>Replaced the combined timestamp picker with side-by-side date and time fields. The date field uses a shadcn calendar popover, and the time input initializes to the user's current local time before a date is selected.</p>
+        </section>
+        <section class="entry">
+          <h2>File Picker Affordance Refinement</h2>
+          <p class="meta">2026-06-28</p>
+          <p>Reworked the file evidence input so users see a distinct choose-file segment, a divider, and a filename display segment. Both visible segments point at the same native file input, preserving accessible file selection and form submission behavior.</p>
+        </section>
+        <section class="entry">
+          <h2>Mobile Pane Overlay Refinement</h2>
+          <p class="meta">2026-06-28</p>
+          <p>Adjusted the sheet overlay layering used by the mobile post creation pane. The backdrop can still dim and blur the map canvas, but the sidebar content is forced above the overlay so the form remains interactive on smaller screens.</p>
+        </section>
+        <section class="entry">
+          <h2>Pane Close Reset</h2>
+          <p class="meta">2026-06-28</p>
+          <p>Added a close-state reset for the post creation pane so native form fields, controlled selectors, uploaded filename display, timestamp state, submit state, and status messages return to their defaults whenever the sidebar closes.</p>
+        </section>
+        <section class="entry">
+          <h2>File Picker Label Behavior</h2>
+          <p class="meta">2026-06-28</p>
+          <p>Aligned the file evidence picker with the custom select controls: the field label names the control but does not trigger it. Only the visible choose-file and filename display control opens the native file picker.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

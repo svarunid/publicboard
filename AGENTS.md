@@ -4,8 +4,6 @@ This project is a full-stack TypeScript application built with Bun, EffectTS, Re
 
 The project follows feature-driven and test-driven development. Organize code by product feature, keep tests close to the code they verify, and prefer small, focused modules over large shared files.
 
-Shared UI components live under `src/components/ui`. Shared utilities live in `src/lib/utils.ts`.
-
 ## Project Structure
 
 Use the existing folder layout as the default shape for new work:
